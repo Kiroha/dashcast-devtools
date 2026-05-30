@@ -5,6 +5,7 @@ import android.os.Bundle;
 import android.widget.TextView;
 
 import com.dashcast.devtools.R;
+import com.google.android.material.appbar.MaterialToolbar;
 
 /**
  * ReconActivity — placeholder.
@@ -13,16 +14,15 @@ import com.dashcast.devtools.R;
  * DashCast (com.byd.dashcast.dilink5.Dl5ClusterReconRunner — 1357 LoC),
  * along with its dep {@code DiLink5TestRunner} (data model), {@code Platform}
  * (DL3/DL5 detection), and the read-only test catalogue.
- *
- * <p>Once transplanted, this Activity should show a list of test rows
- * (PASS/WARN/FAIL/SKIPPED with per-row detail), a "Run all" button, and a
- * "Send via Telegram/Share" export.
  */
 public class ReconActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_placeholder);
+        MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        toolbar.setTitle(R.string.main_btn_recon);
+        toolbar.setNavigationOnClickListener(v -> finish());
         TextView tv = findViewById(R.id.tv_placeholder);
         tv.setText(R.string.recon_placeholder);
     }

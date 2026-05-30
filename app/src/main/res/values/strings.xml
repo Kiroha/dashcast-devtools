@@ -35,6 +35,18 @@
     <string name="recon_placeholder">Recon DL5 — à implémenter (transplant de Dl5ClusterReconRunner depuis DashCast)</string>
     <string name="fission_placeholder">Test Fission — à implémenter (transplant de Dl5VdTestRunner + MirrorDaemon depuis DashCast)</string>
 
+    <!-- Nav rail / hub -->
+    <string name="nav_sniffer">Sniffer</string>
+    <string name="nav_recon">Recon</string>
+    <string name="nav_fission">Fission</string>
+    <string name="nav_back">Retour</string>
+    <string name="menu_overflow">Plus d\'options</string>
+    <string name="menu_about">À propos</string>
+    <string name="about_text_fmt">DashCast DevTools v%1$s (build %2$d)\n\nOutils RE pour la stack BYD :\n• Sniffer (logcat + dumpsys continu)\n• Recon DL5 (à venir)\n• Test Fission (à venir)\n\nhttps://github.com/Kiroha/dashcast-devtools</string>
+    <string name="hub_sniffer_desc">Capture continue logcat + dumpsys, snapshots manuels, export.</string>
+    <string name="hub_recon_desc">Batterie de tests cluster DL5 (à venir — transplant depuis DashCast).</string>
+    <string name="hub_fission_desc">Validation pipeline VirtualDisplay → MirrorDaemon (à venir).</string>
+
     <!-- OTA -->
     <string name="menu_check_updates">🔄 Rechercher des mises à jour</string>
     <string name="ota_dialog_title">Mise à jour disponible</string>

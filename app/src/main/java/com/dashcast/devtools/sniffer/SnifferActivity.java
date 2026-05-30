@@ -14,6 +14,7 @@ import androidx.core.content.FileProvider;
 import com.dashcast.devtools.R;
 import com.dashcast.devtools.common.AdbClient;
 import com.dashcast.devtools.common.AppLogger;
+import com.google.android.material.appbar.MaterialToolbar;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -55,6 +56,9 @@ public class SnifferActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_sniffer);
+
+        MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        toolbar.setNavigationOnClickListener(v -> finish());
 
         tvStatusPill = findViewById(R.id.tv_sniffer_status_pill);
         tvStatus     = findViewById(R.id.tv_sniffer_status);

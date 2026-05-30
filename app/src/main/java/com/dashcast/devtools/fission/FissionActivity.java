@@ -5,25 +5,21 @@ import android.os.Bundle;
 import android.widget.TextView;
 
 import com.dashcast.devtools.R;
+import com.google.android.material.appbar.MaterialToolbar;
 
 /**
  * FissionActivity — placeholder.
  *
- * <p>TODO (next iteration): transplant {@code Dl5VdTestRunner} (VirtualDisplay
- * → MirrorDaemon projection pipeline validator, 554 LoC) plus
- * {@code MirrorDaemon} (474 LoC, daemon bootstrap via ADB → uid 2000 →
- * SurfaceControl). The whole pipeline requires {@code AdbClient} (already in
- * place) plus a minimal {@code Platform} detector for DL5 gating.
- *
- * <p>Once transplanted, this Activity should expose a "Run V01..V07" battery
- * with interactive Yes/No prompts (e.g. "Is the app visible on cluster and
- * well-proportioned?").
+ * <p>TODO (next iteration): transplant {@code Dl5VdTestRunner} + {@code MirrorDaemon}.
  */
 public class FissionActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_placeholder);
+        MaterialToolbar toolbar = findViewById(R.id.toolbar);
+        toolbar.setTitle(R.string.main_btn_fission);
+        toolbar.setNavigationOnClickListener(v -> finish());
         TextView tv = findViewById(R.id.tv_placeholder);
         tv.setText(R.string.fission_placeholder);
     }
