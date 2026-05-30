@@ -103,6 +103,8 @@
     <string name="diag_copy_report">Rapport</string>
     <!-- Bouton envoyer vers Telegram -->
     <string name="diag_send_telegram">Telegram</string>
+    <!-- Bouton partager le rapport -->
+    <string name="diag_btn_share">Partager</string>
     <!-- Toast aucun résultat à exporter -->
     <string name="diag_toast_no_results">Lancez d\'abord les tests.</string>
 

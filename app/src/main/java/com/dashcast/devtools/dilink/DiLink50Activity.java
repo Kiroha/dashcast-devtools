@@ -51,8 +51,7 @@ public class DiLink50Activity extends AppCompatActivity {
     private TextView     tvReconPill;
     private TextView     tvReconCounters;
     private View         btnReconRunAll;
-    private View         btnReconCopyReport;
-    private View         btnReconSendTelegram;
+    private View         btnReconShare;
     private LinearLayout llReconTestList;
 
     // ── Fission views ─────────────────────────────────────────────────────────
@@ -60,7 +59,7 @@ public class DiLink50Activity extends AppCompatActivity {
     private TextView     tvFissionPill;
     private TextView     tvFissionCounters;
     private View         btnFissionRun;
-    private View         btnFissionCopyReport;
+    private View         btnFissionShare;
     private LinearLayout llFissionTestList;
     private FrameLayout  flFissionSurfaceWrapper;
     private SurfaceView  svFissionCluster;
@@ -86,8 +85,7 @@ public class DiLink50Activity extends AppCompatActivity {
     private final List<View>                     mSondesRowViews = new ArrayList<>();
     private final List<DlReconRunner.TestResult> mSondesResults  = new ArrayList<>();
     private View         mBtnSondesRun;
-    private View         mBtnSondesCopy;
-    private View         mBtnSondesTelegram;
+    private View         mBtnSondesShare;
     private TextView     mTvSondesSubtitle;
     private TextView     mTvSondesPill;
     private TextView     mTvSondesCounters;
@@ -154,8 +152,7 @@ public class DiLink50Activity extends AppCompatActivity {
         tvReconPill         = panelRecon.findViewById(R.id.tv_recon_pill);
         tvReconCounters     = panelRecon.findViewById(R.id.tv_recon_counters);
         btnReconRunAll      = panelRecon.findViewById(R.id.btn_recon_run_all);
-        btnReconCopyReport  = panelRecon.findViewById(R.id.btn_recon_copy_report);
-        btnReconSendTelegram= panelRecon.findViewById(R.id.btn_recon_send_telegram);
+        btnReconShare       = panelRecon.findViewById(R.id.btn_recon_share);
         llReconTestList     = panelRecon.findViewById(R.id.ll_recon_test_list);
 
         Platform p = Platform.get();
@@ -167,10 +164,9 @@ public class DiLink50Activity extends AppCompatActivity {
         tvReconCounters.setText(R.string.diag_counters_idle);
 
         btnReconRunAll.setOnClickListener(v -> runReconAllTests());
-        btnReconCopyReport.setOnClickListener(v -> copyReconReport());
-        btnReconSendTelegram.setOnClickListener(v -> sendReconToTelegram());
-        btnReconCopyReport.setEnabled(false);
-        btnReconSendTelegram.setEnabled(false);
+        btnReconShare.setOnClickListener(v -> AppLogger.shareWithReport(this,
+                Dl5ClusterReconRunner.renderReport(mReconLastResults)));
+        btnReconShare.setEnabled(false);
     }
 
     private void prepareReconRowsIfNeeded() {
@@ -194,8 +190,7 @@ public class DiLink50Activity extends AppCompatActivity {
     private void runReconAllTests() {
         prepareReconRowsFor(Dl5ClusterReconRunner.catalog(), mReconRowViews, mReconLastResults, llReconTestList);
         btnReconRunAll.setEnabled(false);
-        btnReconCopyReport.setEnabled(false);
-        btnReconSendTelegram.setEnabled(false);
+        btnReconShare.setEnabled(false);
         tvReconCounters.setText(R.string.diag_counters_running);
         Dl5ClusterReconRunner.runAll(this, new Dl5ClusterReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DiLink5TestRunner.TestResult> results) {
@@ -215,8 +210,7 @@ public class DiLink50Activity extends AppCompatActivity {
             @Override public void onSuiteFinished(List<DiLink5TestRunner.TestResult> results) {
                 safeRun(() -> {
                     btnReconRunAll.setEnabled(true);
-                    btnReconCopyReport.setEnabled(true);
-                    btnReconSendTelegram.setEnabled(true);
+                    btnReconShare.setEnabled(true);
                     updateReconCounters();
                 });
             }
@@ -235,25 +229,6 @@ public class DiLink50Activity extends AppCompatActivity {
         tvReconCounters.setText(getString(R.string.diag_counters_warn_fmt, pass, fail, warn, skip));
     }
 
-    private void copyReconReport() {
-        if (mReconLastResults.isEmpty()) {
-            Toast.makeText(this, R.string.diag_toast_no_results, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String report = Dl5ClusterReconRunner.renderReport(mReconLastResults);
-        AppLogger.i(TAG, "Recon report:\n" + report);
-        AppLogger.shareWithReport(this, report);
-    }
-
-    private void sendReconToTelegram() {
-        if (mReconLastResults.isEmpty()) {
-            Toast.makeText(this, R.string.diag_toast_no_results, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        String report = Dl5ClusterReconRunner.renderReport(mReconLastResults);
-        AppLogger.shareReportToTelegram(this, report);
-    }
-
     // ── Fission panel ─────────────────────────────────────────────────────────
 
     private void bindFissionViews() {
@@ -261,7 +236,7 @@ public class DiLink50Activity extends AppCompatActivity {
         tvFissionPill          = panelFission.findViewById(R.id.tv_fission_pill);
         tvFissionCounters      = panelFission.findViewById(R.id.tv_fission_counters);
         btnFissionRun          = panelFission.findViewById(R.id.btn_fission_run);
-        btnFissionCopyReport   = panelFission.findViewById(R.id.btn_fission_copy_report);
+        btnFissionShare        = panelFission.findViewById(R.id.btn_fission_share);
         llFissionTestList      = panelFission.findViewById(R.id.ll_fission_test_list);
         flFissionSurfaceWrapper= panelFission.findViewById(R.id.fl_fission_surface_wrapper);
         svFissionCluster       = panelFission.findViewById(R.id.sv_fission_cluster);
@@ -279,8 +254,9 @@ public class DiLink50Activity extends AppCompatActivity {
         mVdSurfaceHolder.setFixedSize(1920, 720);
 
         btnFissionRun.setOnClickListener(v -> pickVdTargetThenRun());
-        btnFissionCopyReport.setOnClickListener(v -> copyFissionReport());
-        btnFissionCopyReport.setEnabled(false);
+        btnFissionShare.setOnClickListener(v -> AppLogger.shareWithReport(this,
+                Dl5VdTestRunner.renderReport(mFissionLastResults)));
+        btnFissionShare.setEnabled(false);
     }
 
     private void prepareFissionRowsIfNeeded() {
@@ -353,7 +329,7 @@ public class DiLink50Activity extends AppCompatActivity {
         mFissionRowsPrepared = true;
 
         btnFissionRun.setEnabled(false);
-        btnFissionCopyReport.setEnabled(false);
+        btnFissionShare.setEnabled(false);
         tvFissionCounters.setText(R.string.diag_counters_running);
         flFissionSurfaceWrapper.setVisibility(View.VISIBLE);
 
@@ -383,7 +359,7 @@ public class DiLink50Activity extends AppCompatActivity {
                     @Override public void onSuiteFinished(List<DiLink5TestRunner.TestResult> results) {
                         safeRun(() -> {
                             btnFissionRun.setEnabled(true);
-                            btnFissionCopyReport.setEnabled(true);
+                            btnFissionShare.setEnabled(true);
                             updateFissionCounters();
                         });
                     }
@@ -420,7 +396,7 @@ public class DiLink50Activity extends AppCompatActivity {
         tvFissionCounters.setText(getString(R.string.diag_counters_warn_fmt, pass, fail, warn, skip));
     }
 
-    private void copyFissionReport() {
+    private void copyFissionReport_unused() {
         if (mFissionLastResults.isEmpty()) {
             Toast.makeText(this, R.string.diag_toast_no_results, Toast.LENGTH_SHORT).show();
             return;
@@ -489,15 +465,12 @@ public class DiLink50Activity extends AppCompatActivity {
         mTvSondesPill     = panelSondes.findViewById(R.id.tv_dl50_sondes_pill);
         mTvSondesCounters = panelSondes.findViewById(R.id.tv_dl50_sondes_counters);
         mBtnSondesRun      = panelSondes.findViewById(R.id.btn_dl50_sondes_run);
-        mBtnSondesCopy     = panelSondes.findViewById(R.id.btn_dl50_sondes_copy);
-        mBtnSondesTelegram = panelSondes.findViewById(R.id.btn_dl50_sondes_telegram);
+        mBtnSondesShare    = panelSondes.findViewById(R.id.btn_dl50_sondes_share);
         mLlSondesList      = panelSondes.findViewById(R.id.ll_dl50_sondes_list);
         mBtnSondesRun.setOnClickListener(v -> runSondesTests());
-        mBtnSondesCopy.setOnClickListener(v -> copySondesReport());
-        mBtnSondesTelegram.setOnClickListener(v ->
-                AppLogger.shareReportToTelegram(this, DlReconRunner.buildReport(mSondesResults)));
-        mBtnSondesCopy.setEnabled(false);
-        mBtnSondesTelegram.setEnabled(false);
+        mBtnSondesShare.setOnClickListener(v ->
+                AppLogger.shareWithReport(this, DlReconRunner.buildReport(mSondesResults)));
+        mBtnSondesShare.setEnabled(false);
     }
 
     private void bindSondesHeader() {
@@ -557,8 +530,7 @@ public class DiLink50Activity extends AppCompatActivity {
 
     private void runSondesTests() {
         mBtnSondesRun.setEnabled(false);
-        mBtnSondesCopy.setEnabled(false);
-        mBtnSondesTelegram.setEnabled(false);
+        mBtnSondesShare.setEnabled(false);
         mTvSondesCounters.setText(R.string.diag_counters_running);
         DlReconRunner.runAll(this, new DlReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
@@ -578,8 +550,7 @@ public class DiLink50Activity extends AppCompatActivity {
             @Override public void onSuiteFinished(List<DlReconRunner.TestResult> results) {
                 safeRun(() -> {
                     mBtnSondesRun.setEnabled(true);
-                    mBtnSondesCopy.setEnabled(true);
-                    mBtnSondesTelegram.setEnabled(true);
+                    mBtnSondesShare.setEnabled(true);
                     updateSondesCounters();
                 });
             }
@@ -599,7 +570,7 @@ public class DiLink50Activity extends AppCompatActivity {
                 : getString(R.string.diag_counters_fmt, pass, fail, skip));
     }
 
-    private void copySondesReport() {
+    private void copySondesReport_unused() {
         if (mSondesResults.isEmpty()) {
             Toast.makeText(this, R.string.diag_toast_no_results, Toast.LENGTH_SHORT).show();
             return;

@@ -36,8 +36,7 @@ public class DiLink51Activity extends AppCompatActivity {
     private TextView     mTvPill;
     private TextView     mTvCounters;
     private View         mBtnRun;
-    private View         mBtnCopy;
-    private View         mBtnTelegram;
+    private View         mBtnShare;
     private LinearLayout mLlList;
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -99,12 +98,11 @@ public class DiLink51Activity extends AppCompatActivity {
         mTvPill     = findViewById(R.id.tv_dl51_recon_pill);
         mTvCounters = findViewById(R.id.tv_dl51_recon_counters);
         mBtnRun      = findViewById(R.id.btn_dl51_recon_run);
-        mBtnCopy     = findViewById(R.id.btn_dl51_recon_copy);
-        mBtnTelegram = findViewById(R.id.btn_dl51_recon_telegram);
+        mBtnShare    = findViewById(R.id.btn_dl51_recon_share);
         mLlList      = findViewById(R.id.ll_dl51_recon_list);
         mBtnRun.setOnClickListener(v -> runTests());
-        mBtnCopy.setOnClickListener(v -> copyReport());
-        mBtnCopy.setEnabled(false);
+        mBtnShare.setOnClickListener(v -> AppLogger.shareWithReport(this, DlReconRunner.buildReport(mResults)));
+        mBtnShare.setEnabled(false);
     }
 
     private void bindHeader() {
@@ -164,8 +162,7 @@ public class DiLink51Activity extends AppCompatActivity {
 
     private void runTests() {
         mBtnRun.setEnabled(false);
-        mBtnCopy.setEnabled(false);
-        mBtnTelegram.setEnabled(false);
+        mBtnShare.setEnabled(false);
         mTvCounters.setText(R.string.diag_counters_running);
         DlReconRunner.runAll(this, new DlReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
@@ -185,8 +182,7 @@ public class DiLink51Activity extends AppCompatActivity {
             @Override public void onSuiteFinished(List<DlReconRunner.TestResult> results) {
                 safeRun(() -> {
                     mBtnRun.setEnabled(true);
-                    mBtnCopy.setEnabled(true);
-                    mBtnTelegram.setEnabled(true);
+                    mBtnShare.setEnabled(true);
                     updateCounters();
                 });
             }
@@ -204,14 +200,6 @@ public class DiLink51Activity extends AppCompatActivity {
         mTvCounters.setText(warn > 0
                 ? getString(R.string.diag_counters_warn_fmt, pass, fail, warn, skip)
                 : getString(R.string.diag_counters_fmt, pass, fail, skip));
-    }
-
-    private void copyReport() {
-        if (mResults.isEmpty()) {
-            Toast.makeText(this, R.string.diag_toast_no_results, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        AppLogger.shareWithReport(this, DlReconRunner.buildReport(mResults));
     }
 
     // ── Lifecycle guard ───────────────────────────────────────────────────────

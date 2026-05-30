@@ -140,19 +140,12 @@
                                 android:layout_height="wrap_content"
                                 android:text="@string/diag_run_all"/>
                             <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btn_recon_copy_report"
+                                android:id="@+id/btn_recon_share"
                                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
-                                android:text="@string/diag_copy_report"/>
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btn_recon_send_telegram"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:text="@string/diag_send_telegram"/>
+                                android:text="@string/diag_btn_share"/>
                         </LinearLayout>
 
                     </LinearLayout>
@@ -282,12 +275,12 @@
                                 android:textColor="@color/md_on_tertiary"
                                 android:text="@string/diag_dl50_fission_run"/>
                             <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btn_fission_copy_report"
+                                android:id="@+id/btn_fission_share"
                                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
-                                android:text="@string/diag_copy_report"/>
+                                android:text="@string/diag_btn_share"/>
                         </LinearLayout>
 
                     </LinearLayout>
@@ -422,20 +415,12 @@
                                 android:text="@string/diag_run_all"/>
 
                             <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btn_dl50_sondes_copy"
+                                android:id="@+id/btn_dl50_sondes_share"
                                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
-                                android:text="@string/diag_copy_report"/>
-
-                            <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btn_dl50_sondes_telegram"
-                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_marginStart="8dp"
-                                android:text="@string/diag_send_telegram"/>
+                                android:text="@string/diag_btn_share"/>
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>

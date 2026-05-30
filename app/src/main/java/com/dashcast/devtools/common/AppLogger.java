@@ -85,11 +85,6 @@ public final class AppLogger {
         shareReport(context, report, "devtools_report.log", "text/plain");
     }
 
-    /** Same as {@link #shareWithReport} but targets Telegram explicitly if installed. */
-    public static void shareReportToTelegram(Context context, String report) {
-        shareReport(context, report, "devtools_report.log", "text/plain");
-    }
-
     private static void shareReport(Context ctx, String content, String filename, String mime) {
         try {
             File cacheDir = new File(ctx.getCacheDir(), "reports");
@@ -106,9 +101,7 @@ public final class AppLogger {
                     .setType(mime)
                     .putExtra(Intent.EXTRA_STREAM, uri)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            Intent chooser = Intent.createChooser(intent, null);
-            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            ctx.startActivity(chooser);
+            ctx.startActivity(Intent.createChooser(intent, null));
         } catch (IOException e) {
             Log.e("AppLogger", "shareReport failed", e);
         }

@@ -49,8 +49,7 @@ public class DiLink2Activity extends AppCompatActivity {
     private TextView     mReconPill_dl2;
     private TextView     mReconCounters_dl2;
     private View         mBtnReconRun_dl2;
-    private View         mBtnReconCopy_dl2;
-    private View         mBtnReconTelegram_dl2;
+    private View         mBtnReconShare_dl2;
     private LinearLayout mReconList_dl2;
 
     // ── Recon panel — state ───────────────────────────────────────────────────
@@ -63,14 +62,11 @@ public class DiLink2Activity extends AppCompatActivity {
         mReconPill_dl2       = findViewById(R.id.tv_dl2_recon_pill);
         mReconCounters_dl2   = findViewById(R.id.tv_dl2_recon_counters);
         mBtnReconRun_dl2     = findViewById(R.id.btn_dl2_recon_run);
-        mBtnReconCopy_dl2    = findViewById(R.id.btn_dl2_recon_copy);
-        mBtnReconTelegram_dl2 = findViewById(R.id.btn_dl2_recon_telegram);
+        mBtnReconShare_dl2   = findViewById(R.id.btn_dl2_recon_share);
         mReconList_dl2       = findViewById(R.id.ll_dl2_recon_list);
         mBtnReconRun_dl2.setOnClickListener(v -> runRecon_dl2());
-        mBtnReconCopy_dl2.setOnClickListener(v -> copyRecon_dl2());
-        mBtnReconCopy_dl2.setEnabled(false);
-        mBtnReconTelegram_dl2.setOnClickListener(v -> AppLogger.shareReportToTelegram(this, DlReconRunner.buildReport(mReconResults_dl2)));
-        mBtnReconTelegram_dl2.setEnabled(false);
+        mBtnReconShare_dl2.setOnClickListener(v -> AppLogger.shareWithReport(this, DlReconRunner.buildReport(mReconResults_dl2)));
+        mBtnReconShare_dl2.setEnabled(false);
     }
 
     private void showReconPanel_dl2(boolean show) {
@@ -131,8 +127,7 @@ public class DiLink2Activity extends AppCompatActivity {
 
     private void runRecon_dl2() {
         mBtnReconRun_dl2.setEnabled(false);
-        mBtnReconCopy_dl2.setEnabled(false);
-        mBtnReconTelegram_dl2.setEnabled(false);
+        mBtnReconShare_dl2.setEnabled(false);
         mReconCounters_dl2.setText(R.string.diag_counters_running);
         DlReconRunner.runAll(this, new DlReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
@@ -148,7 +143,7 @@ public class DiLink2Activity extends AppCompatActivity {
                 });
             }
             @Override public void onSuiteFinished(List<DlReconRunner.TestResult> results) {
-                safeRun(() -> { mBtnReconRun_dl2.setEnabled(true); mBtnReconCopy_dl2.setEnabled(true); mBtnReconTelegram_dl2.setEnabled(true); updateReconCounters_dl2(); });
+                safeRun(() -> { mBtnReconRun_dl2.setEnabled(true); mBtnReconShare_dl2.setEnabled(true); updateReconCounters_dl2(); });
             }
         });
     }
@@ -163,15 +158,6 @@ public class DiLink2Activity extends AppCompatActivity {
             ? getString(R.string.diag_counters_warn_fmt, pass, fail, warn, skip)
             : getString(R.string.diag_counters_fmt, pass, fail, skip));
     }
-
-    private void copyRecon_dl2() {
-        if (mReconResults_dl2.isEmpty()) {
-            Toast.makeText(this, R.string.diag_toast_no_results, Toast.LENGTH_SHORT).show(); return;
-        }
-        AppLogger.shareWithReport(this, DlReconRunner.buildReport(mReconResults_dl2));
-    }
-
-    // ── State ────────────────────────────────────────────────────────────────
     private boolean mDestroyed = false;
     private boolean mRowsPrepared = false;
     private final List<View> mRowViews = new ArrayList<>();

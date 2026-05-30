@@ -91,6 +91,7 @@
     <string name="diag_run_all">Uruchom</string>
     <string name="diag_copy_report">Raport</string>
     <string name="diag_send_telegram">Telegram</string>
+    <string name="diag_btn_share">Udostępnij</string>
     <string name="diag_toast_no_results">Run the tests first.</string>
     <string name="diag_dl2_pill_detected">DiLink 2</string>
     <string name="diag_dl2_pill_unknown">?</string>

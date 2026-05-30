@@ -52,8 +52,7 @@ public class DiLink3Activity extends AppCompatActivity {
     private TextView     tvRecon3Pill;
     private TextView     tvRecon3Counters;
     private View         btnRecon3RunAll;
-    private View         btnRecon3CopyReport;
-    private View         btnRecon3SendTelegram;
+    private View         btnRecon3Share;
     private LinearLayout llRecon3TestList;
 
     // ── State — Screen88 ──────────────────────────────────────────────────────
@@ -108,16 +107,13 @@ public class DiLink3Activity extends AppCompatActivity {
         tvRecon3Pill       = findViewById(R.id.tv_recon3_pill);
         tvRecon3Counters   = findViewById(R.id.tv_recon3_counters);
         btnRecon3RunAll       = findViewById(R.id.btn_recon3_run_all);
-        btnRecon3CopyReport   = findViewById(R.id.btn_recon3_copy_report);
-        btnRecon3SendTelegram = findViewById(R.id.btn_recon3_send_telegram);
+        btnRecon3Share        = findViewById(R.id.btn_recon3_share);
         llRecon3TestList      = findViewById(R.id.ll_recon3_test_list);
 
         btnRecon3RunAll.setOnClickListener(v -> runReconTests());
-        btnRecon3CopyReport.setOnClickListener(v -> copyReconReport());
-        btnRecon3SendTelegram.setOnClickListener(v ->
-                AppLogger.shareReportToTelegram(this, DlReconRunner.buildReport(mReconResults)));
-        btnRecon3CopyReport.setEnabled(false);
-        btnRecon3SendTelegram.setEnabled(false);
+        btnRecon3Share.setOnClickListener(v ->
+                AppLogger.shareWithReport(this, DlReconRunner.buildReport(mReconResults)));
+        btnRecon3Share.setEnabled(false);
 
         showPanel(TAB_SCREEN88);
     }
@@ -306,8 +302,7 @@ public class DiLink3Activity extends AppCompatActivity {
 
     private void runReconTests() {
         btnRecon3RunAll.setEnabled(false);
-        btnRecon3CopyReport.setEnabled(false);
-        btnRecon3SendTelegram.setEnabled(false);
+        btnRecon3Share.setEnabled(false);
         tvRecon3Counters.setText(R.string.diag_counters_running);
         DlReconRunner.runAll(this, new DlReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
@@ -327,8 +322,7 @@ public class DiLink3Activity extends AppCompatActivity {
             @Override public void onSuiteFinished(List<DlReconRunner.TestResult> results) {
                 safeRun(() -> {
                     btnRecon3RunAll.setEnabled(true);
-                    btnRecon3CopyReport.setEnabled(true);
-                    btnRecon3SendTelegram.setEnabled(true);
+                    btnRecon3Share.setEnabled(true);
                     updateReconCounters();
                 });
             }
@@ -347,13 +341,6 @@ public class DiLink3Activity extends AppCompatActivity {
         tvRecon3Counters.setText(warn > 0
                 ? getString(R.string.diag_counters_warn_fmt, pass, fail, warn, skip)
                 : getString(R.string.diag_counters_fmt, pass, fail, skip));
-    }
-
-    private void copyReconReport() {
-        if (mReconResults.isEmpty()) {
-            Toast.makeText(this, R.string.diag_toast_no_results, Toast.LENGTH_SHORT).show(); return;
-        }
-        AppLogger.shareWithReport(this, DlReconRunner.buildReport(mReconResults));
     }
 
     // ── Shared UI helper ──────────────────────────────────────────────────────
