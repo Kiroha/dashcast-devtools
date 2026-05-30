@@ -1,6 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DashCast DevTools</string>
+
+    <!-- ─── Welcome / Langue ──────────────────────────────────────────────── -->
+    <string name="welcome_subtitle" translatable="false">DashCast DevTools</string>
+    <string name="welcome_select_lang">Choisissez votre langue\nPlease select your language</string>
+    <string name="welcome_continue_without_change">Continuer sans changer</string>
+    <string name="btn_lang_fr" translatable="false">🇫🇷  Français</string>
+    <string name="btn_lang_en" translatable="false">🇬🇧  English</string>
+    <string name="btn_lang_de" translatable="false">🇩🇪  Deutsch</string>
+    <string name="btn_lang_tr" translatable="false">🇹🇷  Türkçe</string>
+    <string name="btn_lang_it" translatable="false">🇮🇹  Italiano</string>
+    <string name="btn_lang_es" translatable="false">🇪🇸  Español</string>
+    <string name="btn_lang_ru" translatable="false">🇷🇺  Русский</string>
+    <string name="btn_lang_uk" translatable="false">🇺🇦  Українська</string>
+    <string name="btn_lang_ar" translatable="false">🇲🇦  العربية</string>
+    <string name="btn_lang_uz" translatable="false">🇺🇿  Oʻzbekcha</string>
+    <string name="btn_lang_kk" translatable="false">🇰🇿  Қазақша</string>
+    <string name="btn_lang_be" translatable="false">🇧🇾  Беларуская</string>
+    <string name="btn_lang_pl" translatable="false">🇵🇱  Polski</string>
+
     <string name="main_subtitle">Sniffer · DiLink 2 · DiLink 3 · DiLink 4 · DiLink 5</string>
     <string name="main_btn_sniffer">Sniffeur RE</string>
     <string name="main_btn_recon">Recon DL5 (cluster)</string>

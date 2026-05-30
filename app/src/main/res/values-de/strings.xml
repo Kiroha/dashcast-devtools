@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DashCast DevTools</string>
+    <!-- Welcome / Langue -->
+    <string name="welcome_continue_without_change">Ohne Änderung fortfahren</string>
+
     <string name="main_subtitle">Sniffer · DiLink 2 · DiLink 3 · DiLink 4 · DiLink 5</string>
     <string name="main_btn_sniffer">RE Sniffer</string>
     <string name="main_btn_recon">DL5 Recon (cluster)</string>

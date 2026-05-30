@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    WelcomeActivity — first launch language picker.
+    Grille 4×3+1 de boutons outlined (13 langues) + bouton "Continuer sans changer".
+    Adapté du layout DashCast principal pour le thème DevTools (Material3).
+-->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="center"
+        android:paddingLeft="60dp"
+        android:paddingRight="60dp"
+        android:paddingTop="24dp"
+        android:paddingBottom="24dp">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            app:cardBackgroundColor="@color/md_surface_container"
+            app:cardCornerRadius="28dp"
+            app:cardElevation="0dp"
+            app:contentPaddingTop="32dp"
+            app:contentPaddingBottom="32dp"
+            app:contentPaddingLeft="56dp"
+            app:contentPaddingRight="56dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:gravity="center_horizontal">
+
+                <!-- Hero logo -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="80dp"
+                    android:layout_height="80dp"
+                    app:cardBackgroundColor="?attr/colorPrimaryContainer"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="0dp"
+                    android:layout_marginBottom="14dp">
+
+                    <ImageView
+                        android:layout_width="48dp"
+                        android:layout_height="48dp"
+                        android:layout_gravity="center"
+                        android:src="@drawable/ic_cast"
+                        android:tint="@color/md_on_primary_container"
+                        android:contentDescription="@string/app_name"/>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Title -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textSize="36sp"
+                    android:textColor="?attr/colorOnSurface"
+                    android:letterSpacing="0"
+                    android:layout_marginBottom="6dp"/>
+
+                <!-- Subtitle: DashCast DevTools · vX.Y.Z -->
+                <TextView
+                    android:id="@+id/tv_welcome_subtitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/welcome_subtitle"
+                    android:textSize="13sp"
+                    android:textColor="?attr/colorPrimary"
+                    android:letterSpacing="0.18"
+                    android:layout_marginBottom="18dp"/>
+
+                <!-- Prompt -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/welcome_select_lang"
+                    android:textSize="15sp"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:gravity="center"
+                    android:layout_marginBottom="16dp"/>
+
+                <!-- Row 1: FR / EN / DE -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="14dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_fr"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_fr"
+                        android:layout_marginEnd="14dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_en"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_en"
+                        android:layout_marginEnd="14dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_de"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_de"/>
+
+                </LinearLayout>
+
+                <!-- Row 2: IT / TR / ES -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="14dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_it"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_it"
+                        android:layout_marginEnd="14dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_tr"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_tr"
+                        android:layout_marginEnd="14dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_es"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_es"/>
+
+                </LinearLayout>
+
+                <!-- Row 3: RU / UK / AR -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="14dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_ru"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_ru"
+                        android:layout_marginEnd="14dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_uk"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_uk"
+                        android:layout_marginEnd="14dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_ar"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_ar"/>
+
+                </LinearLayout>
+
+                <!-- Row 4: UZ / KK / BE -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="14dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_uz"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_uz"
+                        android:layout_marginEnd="14dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_kk"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_kk"
+                        android:layout_marginEnd="14dp"/>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_be"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_be"/>
+
+                </LinearLayout>
+
+                <!-- Row 5: PL (seul) -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btn_lang_pl"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/btn_lang_pl"/>
+
+                </LinearLayout>
+
+                <!-- "Continue without changing" -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_continue_without_change"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="18dp"
+                    android:text="@string/welcome_continue_without_change"
+                    app:icon="@drawable/ic_arrow_forward"
+                    app:iconGravity="textEnd"
+                    app:iconPadding="8dp"/>
+
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+    </LinearLayout>
+</ScrollView>

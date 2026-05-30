@@ -23,7 +23,7 @@
         android:supportsRtl="true">
 
         <activity
-            android:name=".MainActivity"
+            android:name=".WelcomeActivity"
             android:exported="true"
             android:screenOrientation="landscape">
             <intent-filter>
@@ -31,6 +31,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"/>
 
         <activity
             android:name=".sniffer.SnifferActivity"
