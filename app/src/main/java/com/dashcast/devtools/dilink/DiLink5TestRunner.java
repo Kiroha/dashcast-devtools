@@ -330,8 +330,10 @@ public final class DiLink5TestRunner {
     }
 
     private static void runD4(Context ctx, TestResult r) {
+        // READ-ONLY — NEVER use "wm overscan <values>" which would modify display 0.
+        // We probe availability via dumpsys (read) + wm help output only.
         AtomicReference<String> out = new AtomicReference<>("");
-        runShellSync(ctx, "wm overscan 0,0,0,0 -d 0 2>&1; echo ---; wm 2>&1 | grep -i overscan", out, 4000);
+        runShellSync(ctx, "wm 2>&1 | grep -i overscan; echo ---; dumpsys window | grep -i 'mOverscan\\|mRestrictedOverscan'", out, 4000);
         String raw = out.get();
         r.detail = raw;
         String lower = raw.toLowerCase();

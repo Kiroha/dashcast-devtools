@@ -91,6 +91,15 @@
     <string name="diag_dl2_pill_detected">DiLink 2 détecté</string>
     <string name="diag_dl2_pill_unknown">Plateforme inconnue</string>
 
+    <!-- ─── DiLink 3 ───────────────────────────────────────────────────────── -->
+    <string name="diag_dl3_pill_detected">DiLink 3 détecté</string>
+    <string name="diag_dl3_pill_unknown">Plateforme inconnue</string>
+    <string name="diag_dl3_tab_screen88">8.8 Screen</string>
+    <string name="diag_dl3_screen88_title">Compatibilité écran 8.8\"</string>
+    <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_recon_title">Reconnaissance DL3</string>
+    <string name="diag_dl3_recon_info">25 sondes [App] (Java API) et [ADB] (shell via UID appli) pour cartographier les capacités disponibles : displays, processus, API 29, resize, VirtualDisplay. Aucune modification du display 0.</string>
+
     <!-- ─── DiLink 4 ───────────────────────────────────────────────────────── -->
     <string name="diag_dl4_pill_detected">DiLink 4 détecté</string>
     <string name="diag_dl4_pill_unknown">Plateforme inconnue</string>
@@ -103,6 +112,15 @@
     <!-- Labels des onglets DL5.0 -->
     <string name="diag_tab_recon">Recon</string>
     <string name="diag_tab_fission">Fission</string>
+    <string name="diag_dl50_tab_sondes">Sondes</string>
+
+    <!-- Labels onglets génériques (DL2, DL4, DL51) -->
+    <string name="diag_tab_tests">Tests</string>
+    <string name="diag_tab_recon_infra">Recon</string>
+
+    <!-- Panneau DlReconRunner générique (DL2/DL4/DL50-Sondes/DL51) -->
+    <string name="diag_recon_infra_title">Reconnaissance plateforme</string>
+    <string name="diag_recon_infra_info">25 sondes [App] (Java API) et [ADB] (shell via UID appli) pour cartographier les capacités disponibles : displays, processus, commandes API, resize, VirtualDisplay. Aucune modification du display 0.</string>
     <!-- Titres sections -->
     <string name="diag_dl50_recon_title">Recon cluster DL5</string>
     <string name="diag_dl50_fission_title">Test Fission (VD pipeline)</string>

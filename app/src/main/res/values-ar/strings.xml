@@ -91,6 +91,15 @@
     <string name="diag_toast_no_results">Run the tests first.</string>
     <string name="diag_dl2_pill_detected">DiLink 2</string>
     <string name="diag_dl2_pill_unknown">?</string>
+    <!-- ─── DiLink 3 ───────────────────────────────────────────────────────── -->
+    <string name="diag_dl3_pill_detected">تم اكتشاف DiLink 3</string>
+    <string name="diag_dl3_pill_unknown">منصة غير معروفة</string>
+    <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_recon_title">استطلاع DL3</string>
+    <string name="diag_dl3_recon_info">25 مسبار [App] و[ADB] لرسم خريطة الإمكانات المتاحة: الشاشات والعمليات وAPI 29 وتغيير الحجم وVirtualDisplay. لا يتم تعديل الشاشة 0 أبدًا.</string>
+    <string name="diag_dl3_tab_screen88">8.8 Screen</string>
+    <string name="diag_dl3_screen88_title">توافق شاشة 8.8 بوصة</string>
+
     <string name="diag_dl4_pill_detected">DiLink 4</string>
     <string name="diag_dl4_pill_unknown">?</string>
     <string name="diag_dl4_warning_d_tier">⚠ D-tier tests send AutoContainer commands. Do not run while the vehicle is in motion.</string>
@@ -98,6 +107,15 @@
     <string name="diag_dl50_pill_unknown">?</string>
     <string name="diag_tab_recon">Recon</string>
     <string name="diag_tab_fission">Fission</string>
+    <string name="diag_dl50_tab_sondes">مجسّات</string>
+
+    <!-- Labels onglets génériques (DL2, DL4, DL51) -->
+    <string name="diag_tab_tests">اختبارات</string>
+    <string name="diag_tab_recon_infra">استطلاع</string>
+
+    <!-- Panneau DlReconRunner générique (DL2/DL4/DL50-Sondes/DL51) -->
+    <string name="diag_recon_infra_title">استطلاع المنصة</string>
+    <string name="diag_recon_infra_info">25 مجسّاً [App] (Java API) و[ADB] (shell عبر UID التطبيق) لرسم خريطة الإمكانيات المتاحة: الشاشات، العمليات، أوامر API، تغيير الحجم، VirtualDisplay. لا تعديل على display 0.</string>
     <string name="diag_dl50_recon_title">استطلاع مجموعة DL5</string>
     <string name="diag_dl50_fission_title">اختبار الانشطار (VD pipeline)</string>
     <string name="diag_dl50_fission_warning">⚠ VirtualDisplay test — DL5 only.</string>

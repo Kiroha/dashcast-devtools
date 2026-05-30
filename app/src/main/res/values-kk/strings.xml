@@ -91,6 +91,15 @@
     <string name="diag_toast_no_results">Run the tests first.</string>
     <string name="diag_dl2_pill_detected">DiLink 2</string>
     <string name="diag_dl2_pill_unknown">?</string>
+    <!-- ─── DiLink 3 ───────────────────────────────────────────────────────── -->
+    <string name="diag_dl3_pill_detected">DiLink 3 анықталды</string>
+    <string name="diag_dl3_pill_unknown">Платформа белгісіз</string>
+    <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_recon_title">DL3 барлау</string>
+    <string name="diag_dl3_recon_info">Қолжетімді мүмкіндіктерді картаға түсіруге арналған 25 зонд [App] және [ADB]: дисплейлер, процестер, API 29, өлшемді өзгерту, VirtualDisplay. Display 0 өзгертілмейді.</string>
+    <string name="diag_dl3_tab_screen88">8.8 Screen</string>
+    <string name="diag_dl3_screen88_title">8.8&quot; экран үйлесімділігі</string>
+
     <string name="diag_dl4_pill_detected">DiLink 4</string>
     <string name="diag_dl4_pill_unknown">?</string>
     <string name="diag_dl4_warning_d_tier">⚠ D-tier tests send AutoContainer commands. Do not run while the vehicle is in motion.</string>
@@ -98,6 +107,15 @@
     <string name="diag_dl50_pill_unknown">?</string>
     <string name="diag_tab_recon">Recon</string>
     <string name="diag_tab_fission">Fission</string>
+    <string name="diag_dl50_tab_sondes">Зондтар</string>
+
+    <!-- Labels onglets génériques (DL2, DL4, DL51) -->
+    <string name="diag_tab_tests">Тесттер</string>
+    <string name="diag_tab_recon_infra">Барлау</string>
+
+    <!-- Panneau DlReconRunner générique (DL2/DL4/DL50-Sondes/DL51) -->
+    <string name="diag_recon_infra_title">Платформаны барлау</string>
+    <string name="diag_recon_infra_info">25 зонд [App] (Java API) және [ADB] (app UID арқылы shell) қолжетімді мүмкіндіктерді картаға түсіру үшін: дисплейлер, процестер, API командалары, resize, VirtualDisplay. Display 0 өзгертілмейді.</string>
     <string name="diag_dl50_recon_title">DL5 cluster recon</string>
     <string name="diag_dl50_fission_title">Fission test (VD pipeline)</string>
     <string name="diag_dl50_fission_warning">⚠ VirtualDisplay test — DL5 only.</string>

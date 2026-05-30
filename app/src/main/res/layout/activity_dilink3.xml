@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  activity_dilink2.xml — DiLink 2 diagnostic activity.
-  Tab 0 "Tests" : DiLink2TestRunner (L1–L15 + S1–S25)
-  Tab 1 "Recon" : DlReconRunner (25 sondes App+ADB)
+  activity_dilink3.xml — DiLink 3 diagnostic activity.
+  Tab 0 : "8.8 Screen" (Dl3ScreenRunner)
+  Tab 1 : "Recon"      (Dl3ReconRunner — 25 tests App+ADB)
 -->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
@@ -12,17 +12,16 @@
     android:orientation="vertical"
     android:background="?android:attr/windowBackground">
 
-    <!-- Toolbar -->
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        app:title="@string/dilink2_name"
+        app:title="@string/dilink3_name"
         app:navigationIcon="?attr/homeAsUpIndicator"
         style="@style/Widget.MaterialComponents.Toolbar.Primary"/>
 
     <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tabs_dl2"
+        android:id="@+id/tabs_dl3"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:tabMode="fixed"
@@ -38,141 +37,13 @@
         android:layout_height="0dp"
         android:layout_weight="1">
 
+        <!-- ── Panel 8.8 Screen ─────────────────────────────────────────── -->
         <androidx.core.widget.NestedScrollView
-            android:id="@+id/panel_tests"
+            android:id="@+id/panel_screen88"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:fillViewport="true"
             android:visibility="visible">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:padding="16dp">
-
-            <!-- Header card -->
-            <com.google.android.material.card.MaterialCardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="16dp"
-                app:cardCornerRadius="20dp"
-                app:cardElevation="0dp"
-                app:strokeWidth="1dp"
-                app:strokeColor="@color/md_outline_variant"
-                app:cardBackgroundColor="@color/md_surface_container_low"
-                app:contentPadding="20dp">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical">
-
-                    <!-- Icône + titre -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="8dp">
-                        <ImageView
-                            android:layout_width="32dp"
-                            android:layout_height="32dp"
-                            android:src="@android:drawable/ic_dialog_info"
-                            android:tint="@color/md_primary"
-                            android:layout_marginEnd="12dp"/>
-                        <LinearLayout
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="@string/dilink2_name"
-                                android:textSize="18sp"
-                                android:textStyle="bold"
-                                android:textColor="?android:attr/textColorPrimary"/>
-                            <TextView
-                                android:id="@+id/tv_dl2_header_subtitle"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textSize="12sp"
-                                android:textColor="@color/md_on_surface_variant"
-                                android:text="…"/>
-                        </LinearLayout>
-                    </LinearLayout>
-
-                    <!-- Pill + compteurs -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical"
-                        android:layout_marginBottom="12dp">
-                        <TextView
-                            android:id="@+id/tv_dl2_signature_pill"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:paddingStart="12dp"
-                            android:paddingEnd="12dp"
-                            android:paddingTop="4dp"
-                            android:paddingBottom="4dp"
-                            android:background="@drawable/bg_test_pill"
-                            android:textSize="12sp"
-                            android:textStyle="bold"
-                            android:text="—"/>
-                        <TextView
-                            android:id="@+id/tv_dl2_counters"
-                            android:layout_width="0dp"
-                            android:layout_weight="1"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="12dp"
-                            android:textSize="12sp"
-                            android:textColor="@color/md_on_surface_variant"
-                            android:text="@string/diag_counters_idle"/>
-                    </LinearLayout>
-
-                    <!-- Boutons -->
-                    <LinearLayout
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="horizontal"
-                        android:gravity="center_vertical">
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_dl2_run_all"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="@string/diag_run_all"/>
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/btn_dl2_copy_report"
-                            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:layout_marginStart="8dp"
-                            android:text="@string/diag_copy_report"/>
-                    </LinearLayout>
-
-                </LinearLayout>
-            </com.google.android.material.card.MaterialCardView>
-
-            <!-- Liste des tests -->
-            <LinearLayout
-                android:id="@+id/ll_dl2_test_list"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"/>
-
-        </LinearLayout>
-        </androidx.core.widget.NestedScrollView>
-
-        <!-- ── Panel Recon ──────────────────────────────────────────── -->
-        <androidx.core.widget.NestedScrollView
-            android:id="@+id/panel_recon_dl2"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:fillViewport="true"
-            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -180,6 +51,7 @@
                 android:orientation="vertical"
                 android:padding="12dp">
 
+                <!-- Header card -->
                 <com.google.android.material.card.MaterialCardView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -197,6 +69,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical">
 
+                        <!-- Title row -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -208,13 +81,13 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1"
-                                android:text="@string/diag_recon_infra_title"
+                                android:text="@string/diag_dl3_screen88_title"
                                 android:textSize="18sp"
                                 android:textStyle="bold"
                                 android:textColor="?android:attr/textColorPrimary"/>
 
                             <TextView
-                                android:id="@+id/tv_dl2_recon_subtitle"
+                                android:id="@+id/tv_screen88_subtitle"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:textSize="12sp"
@@ -222,14 +95,7 @@
                                 android:text="…"/>
                         </LinearLayout>
 
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="12dp"
-                            android:text="@string/diag_recon_infra_info"
-                            android:textSize="11sp"
-                            android:textColor="@color/md_on_surface_variant"/>
-
+                        <!-- Pill + counters row -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -238,7 +104,7 @@
                             android:layout_marginBottom="16dp">
 
                             <TextView
-                                android:id="@+id/tv_dl2_recon_pill"
+                                android:id="@+id/tv_screen88_pill"
                                 android:layout_width="wrap_content"
                                 android:layout_height="36dp"
                                 android:gravity="center"
@@ -248,10 +114,10 @@
                                 android:textStyle="bold"
                                 android:textColor="?android:attr/textColorPrimary"
                                 android:background="@drawable/bg_test_pill"
-                                android:text="@string/diag_dl2_pill_unknown"/>
+                                android:text="@string/diag_dl3_pill_unknown"/>
 
                             <TextView
-                                android:id="@+id/tv_dl2_recon_counters"
+                                android:id="@+id/tv_screen88_counters"
                                 android:layout_width="0dp"
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content"
@@ -261,30 +127,166 @@
                                 android:text="@string/diag_counters_idle"/>
                         </LinearLayout>
 
+                        <!-- Buttons row -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal">
 
                             <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btn_dl2_recon_run"
+                                android:id="@+id/btn_screen88_run_all"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:text="@string/diag_run_all"/>
 
                             <com.google.android.material.button.MaterialButton
-                                android:id="@+id/btn_dl2_recon_copy"
+                                android:id="@+id/btn_screen88_copy_report"
                                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
                                 android:text="@string/diag_copy_report"/>
                         </LinearLayout>
+
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
+                <!-- Test list -->
                 <LinearLayout
-                    android:id="@+id/ll_dl2_recon_list"
+                    android:id="@+id/ll_screen88_test_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"/>
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- ── Panel Recon ──────────────────────────────────────────────── -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/panel_recon"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <!-- Header card -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    app:cardCornerRadius="20dp"
+                    app:cardBackgroundColor="@color/md_surface_container_low"
+                    app:contentPaddingTop="20dp"
+                    app:contentPaddingBottom="20dp"
+                    app:contentPaddingLeft="20dp"
+                    app:contentPaddingRight="20dp"
+                    app:strokeWidth="0dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <!-- Title row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="12dp">
+
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text="@string/diag_dl3_recon_title"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
+                                android:textColor="?android:attr/textColorPrimary"/>
+
+                            <TextView
+                                android:id="@+id/tv_recon3_subtitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:textSize="12sp"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:text="…"/>
+                        </LinearLayout>
+
+                        <!-- Info banner -->
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="12dp"
+                            android:text="@string/diag_dl3_recon_info"
+                            android:textSize="11sp"
+                            android:textColor="@color/md_on_surface_variant"/>
+
+                        <!-- Pill + counters row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="16dp">
+
+                            <TextView
+                                android:id="@+id/tv_recon3_pill"
+                                android:layout_width="wrap_content"
+                                android:layout_height="36dp"
+                                android:gravity="center"
+                                android:paddingStart="12dp"
+                                android:paddingEnd="12dp"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:textColor="?android:attr/textColorPrimary"
+                                android:background="@drawable/bg_test_pill"
+                                android:text="@string/diag_dl3_pill_unknown"/>
+
+                            <TextView
+                                android:id="@+id/tv_recon3_counters"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:textSize="12sp"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:text="@string/diag_counters_idle"/>
+                        </LinearLayout>
+
+                        <!-- Buttons row -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_recon3_run_all"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/diag_run_all"/>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_recon3_copy_report"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/diag_copy_report"/>
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- Test list -->
+                <LinearLayout
+                    android:id="@+id/ll_recon3_test_list"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"/>
