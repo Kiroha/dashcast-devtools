@@ -45,6 +45,26 @@ public final class AdbClient {
 
     private AdbClient() {}
 
+    /**
+     * Warm-up: open a connection in background to surface the
+     * "Allow USB debugging?" popup as early as possible (typically at
+     * app launch), so the user accepts it once and the very first real
+     * shell command from any feature succeeds immediately.
+     *
+     * <p>Safe to call multiple times — no-op if the connection succeeds.
+     */
+    public static void warmUp(final Context context) {
+        final Context appCtx = context.getApplicationContext();
+        EXEC.submit(() -> {
+            try (Dadb dadb = connect(appCtx)) {
+                AdbShellResponse r = dadb.shell("id -u");
+                AppLogger.i(TAG, "warmUp OK: uid=" + r.getAllOutput().trim());
+            } catch (Exception e) {
+                AppLogger.w(TAG, "warmUp failed (popup refused / port closed?): " + e.getMessage());
+            }
+        });
+    }
+
     /** Fire-and-forget shell command. */
     public static void executeShell(final Context context, final String command) {
         final Context appCtx = context.getApplicationContext();
@@ -76,16 +96,51 @@ public final class AdbClient {
         });
     }
 
+    /** Lock for key generation: prevents TOCTOU if two ADB calls land
+     *  simultaneously on first launch before the .key/.pub files exist. */
+    private static final Object sKeyLock = new Object();
+
     private static Dadb connect(Context context) throws Exception {
         File keyDir = context.getFilesDir();
-        File pri = new File(keyDir, "adbkey");
-        File pub = new File(keyDir, "adbkey.pub");
-        if (!pri.exists() || !pub.exists()) {
-            AppLogger.i(TAG, "Generating new ADB key pair");
-            AdbKeyPair.generate(pri, pub);
+        // Same filenames as DashCast (adb.key / adb.pub) — keeps a single
+        // RSA fingerprint per user across both apps so the popup is shown
+        // only once even when both DashCast and DevTools are installed.
+        File pri = new File(keyDir, "adb.key");
+        File pub = new File(keyDir, "adb.pub");
+        AdbKeyPair keyPair;
+        synchronized (sKeyLock) {
+            if (!pri.exists() || !pub.exists()) {
+                AppLogger.i(TAG, "Generating new ADB key pair");
+                AdbKeyPair.generate(pri, pub);
+            }
+            keyPair = AdbKeyPair.read(pri, pub);
         }
-        AdbKeyPair keyPair = AdbKeyPair.read(pri, pub);
-        return Dadb.create("127.0.0.1", ADB_PORT, keyPair);
+
+        // Retry loop — gives the user up to ~30s to tap 'Always allow from
+        // this computer' on the "Allow USB debugging?" popup. Without this
+        // the very first call after a fresh install fails instantly while
+        // the popup is still on screen, and the user is left wondering
+        // why nothing happens.
+        int retries = 15;
+        Exception last = null;
+        while (retries-- > 0) {
+            try {
+                return Dadb.create("localhost", ADB_PORT, keyPair);
+            } catch (Exception e) {
+                last = e;
+                if (e instanceof InterruptedException) {
+                    Thread.currentThread().interrupt();
+                    throw e;
+                }
+                AppLogger.w(TAG, "ADB connect failed (popup pending?), retry in 2s, " + retries + " left");
+                try { Thread.sleep(2000); }
+                catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                }
+            }
+        }
+        throw last != null ? last : new Exception("ADB connect: unknown failure");
     }
 
     private static String truncate(String s) {

@@ -55,6 +55,10 @@ public class MainActivity extends Activity {
         // OTA auto-check on fresh launch only (not on rotation)
         if (savedInstanceState == null) {
             OtaUi.checkNow(this, /* notifyIfUpToDate= */ false);
+            // Surface the "Allow USB debugging?" popup at launch so the
+            // user accepts it once (and the key is whitelisted by adbd)
+            // BEFORE they open Sniffer / Recon / Fission.
+            com.dashcast.devtools.common.AdbClient.warmUp(this);
         }
     }
 
