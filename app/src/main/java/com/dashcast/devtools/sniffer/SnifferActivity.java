@@ -94,7 +94,10 @@ public class SnifferActivity extends Activity {
     private void setUiActive(boolean active, String detail) {
         if (mDestroyed) return;
         tvStatusPill.setText(active ? R.string.sniffer_pill_active : R.string.sniffer_pill_inactive);
-        tvStatusPill.setTextColor(active ? 0xFF69F0AE : 0xFFFF8A80);
+        tvStatusPill.setTextColor(getColor(active ? R.color.md_status_ok : R.color.md_status_err));
+        tvStatusPill.setBackgroundResource(active
+                ? R.drawable.bg_sniffer_pill_active
+                : R.drawable.bg_sniffer_pill_inactive);
         if (detail != null) tvStatus.setText(detail);
         btnStart.setEnabled(!active);
         btnStop.setEnabled(active);

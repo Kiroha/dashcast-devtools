@@ -114,6 +114,7 @@ public class DiLink4Activity extends AppCompatActivity {
             default:      glyph="·"; color=0xFF607D8B; break;
         }
         sv.setText(glyph); sv.setTextColor(color);
+        sv.setBackgroundResource(DlPillBg.forStatus(r.status.name()));
         ev.setText(r.elapsedMs > 0 ? r.elapsedMs + " ms" : "");
         if (r.message != null && !r.message.isEmpty()) {
             mv.setVisibility(View.VISIBLE); mv.setText(r.message);
@@ -266,6 +267,7 @@ public class DiLink4Activity extends AppCompatActivity {
         }
         statusView.setText(glyph);
         statusView.setTextColor(color);
+        statusView.setBackgroundResource(DlPillBg.forStatus(r.status.name()));
         elapView.setText(r.elapsedMs > 0 ? (r.elapsedMs + " ms") : "");
 
         if (r.message != null && !r.message.isEmpty()) {

@@ -1,101 +1,248 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  activity_sniffer.xml — RE Sniffer (logcat continu + snapshots dumpsys).
+  Design Material 3 calqué sur la page "Sniffer" de l'app principale BYD :
+  carte principale (header + pill statut + description + 5 boutons) puis
+  cartes informatives "Contenu capturé" et "Procédure type".
+-->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@color/md_background">
+    android:background="?android:attr/windowBackground">
 
     <com.google.android.material.appbar.MaterialToolbar
         android:id="@+id/toolbar"
         android:layout_width="match_parent"
-        android:layout_height="?attr/actionBarSize"
-        android:background="@color/md_surface_container_low"
+        android:layout_height="wrap_content"
         app:title="@string/sniffer_title"
-        app:titleTextColor="@color/md_on_surface"
-        app:navigationIcon="@drawable/ic_arrow_back"
-        app:navigationIconTint="@color/md_on_surface_variant"
-        app:navigationContentDescription="@string/nav_back" />
+        app:navigationIcon="?attr/homeAsUpIndicator"
+        app:navigationContentDescription="@string/nav_back"
+        style="@style/Widget.MaterialComponents.Toolbar.Primary" />
 
-    <LinearLayout
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="vertical"
-        android:padding="24dp">
+        android:fillViewport="true">
 
-    <TextView
-        android:id="@+id/tv_sniffer_status_pill"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="@string/sniffer_pill_inactive"
-        android:textSize="14sp"
-        android:textStyle="bold"
-        android:textColor="@color/md_status_err"
-        android:layout_marginBottom="12dp" />
-
-    <TextView
-        android:id="@+id/tv_sniffer_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/sniffer_idle"
-        android:textSize="13sp"
-        android:textColor="@color/md_on_surface_variant"
-        android:layout_marginBottom="20dp"
-        android:minLines="2" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal">
-
-        <Button
-            android:id="@+id/btn_sniffer_start"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/sniffer_btn_start"
-            android:layout_marginEnd="6dp" />
+            android:orientation="vertical"
+            android:padding="16dp">
 
-        <Button
-            android:id="@+id/btn_sniffer_stop"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/sniffer_btn_stop"
-            android:enabled="false"
-            android:layout_marginEnd="6dp" />
+            <!-- ─── Carte principale : contrôle du sniffer ────────────── -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/md_outline_variant"
+                app:cardBackgroundColor="@color/md_surface_container_low"
+                app:contentPadding="20dp">
 
-        <Button
-            android:id="@+id/btn_sniffer_snapshot"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/sniffer_btn_snapshot"
-            android:enabled="false" />
-    </LinearLayout>
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
 
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:layout_marginTop="12dp">
+                    <!-- Header : icône + titre/sous-titre + pill statut -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="16dp">
 
-        <Button
-            android:id="@+id/btn_sniffer_export"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/sniffer_btn_export"
-            android:enabled="false"
-            android:layout_marginEnd="6dp" />
+                        <ImageView
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:src="@drawable/ic_sniffer"
+                            android:tint="@color/md_primary"
+                            android:layout_marginEnd="12dp"
+                            android:contentDescription="@null" />
 
-        <Button
-            android:id="@+id/btn_sniffer_cleanup"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/sniffer_btn_cleanup" />
-    </LinearLayout>
-    </LinearLayout>
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/sniffer_title"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
+                                android:textColor="?android:attr/textColorPrimary" />
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/sniffer_subtitle"
+                                android:textSize="12sp"
+                                android:textColor="@color/md_on_surface_variant" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/tv_sniffer_status_pill"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:paddingStart="12dp"
+                            android:paddingEnd="12dp"
+                            android:paddingTop="4dp"
+                            android:paddingBottom="4dp"
+                            android:background="@drawable/bg_sniffer_pill_inactive"
+                            android:text="@string/sniffer_pill_inactive"
+                            android:textSize="12sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/md_status_err" />
+                    </LinearLayout>
+
+                    <!-- Description / état courant -->
+                    <TextView
+                        android:id="@+id/tv_sniffer_status"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/sniffer_idle"
+                        android:textSize="13sp"
+                        android:fontFamily="monospace"
+                        android:textColor="@color/md_on_surface_variant"
+                        android:layout_marginBottom="20dp"
+                        android:minLines="2" />
+
+                    <!-- Ligne des 5 boutons -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_sniffer_start"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/sniffer_btn_start"
+                            android:layout_marginEnd="6dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_sniffer_stop"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/sniffer_btn_stop"
+                            android:enabled="false"
+                            android:layout_marginEnd="6dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_sniffer_snapshot"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/sniffer_btn_snapshot"
+                            android:enabled="false"
+                            android:layout_marginEnd="6dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_sniffer_export"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/sniffer_btn_export"
+                            android:enabled="false"
+                            android:layout_marginEnd="6dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btn_sniffer_cleanup"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/sniffer_btn_cleanup" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ─── Carte : Contenu capturé ──────────────────────────── -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/md_outline_variant"
+                app:cardBackgroundColor="@color/md_surface_container_low"
+                app:contentPadding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/sniffer_content_title"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/sniffer_content_body"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:lineSpacingExtra="2dp"
+                        android:textColor="@color/md_on_surface_variant" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- ─── Carte : Procédure type ───────────────────────────── -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/md_outline_variant"
+                app:cardBackgroundColor="@color/md_surface_container_low"
+                app:contentPadding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/sniffer_procedure_title"
+                        android:textSize="15sp"
+                        android:textStyle="bold"
+                        android:textColor="?android:attr/textColorPrimary"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/sniffer_procedure_body"
+                        android:textSize="12sp"
+                        android:fontFamily="monospace"
+                        android:lineSpacingExtra="2dp"
+                        android:textColor="@color/md_on_surface_variant" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>

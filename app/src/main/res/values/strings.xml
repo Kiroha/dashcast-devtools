@@ -27,9 +27,10 @@
 
     <!-- Sniffer -->
     <string name="sniffer_title">Sniffeur RE</string>
+    <string name="sniffer_subtitle">Capture logcat continu + snapshots dumpsys vers fichier exportable</string>
     <string name="sniffer_pill_active">● ACTIF</string>
     <string name="sniffer_pill_inactive">○ INACTIF</string>
-    <string name="sniffer_idle">Aucune capture en cours.</string>
+    <string name="sniffer_idle">Aucune capture en cours.\nAppuie sur Démarrer pour lancer un nouveau fichier BYD_RE_Sniffer_*.txt.</string>
     <string name="sniffer_initializing">Initialisation…</string>
     <string name="sniffer_active_fmt">Capture en cours → %1$s</string>
     <string name="sniffer_active_detail_fmt">Reprise : %1$s (%2$d KB)</string>
@@ -49,6 +50,11 @@
     <string name="sniffer_btn_snapshot">Snapshot</string>
     <string name="sniffer_btn_export">Exporter</string>
     <string name="sniffer_btn_cleanup">Nettoyer</string>
+
+    <string name="sniffer_content_title">Contenu capturé</string>
+    <string name="sniffer_content_body">• Header initial : ro.product.model, fingerprint\n• Live : logcat threadtime complet + buffer events (sans filtre, rien manqué)\n• Snap auto toutes les 60 s (fichier _snap.txt écrasé) : dumpsys display, SurfaceFlinger, window, activity, meminfo, ps -A\n• Snapshot manuel : marque l\'instant dans le log principal + rafraîchit le snap\n• Persistance : la capture survit à la rotation/destruction d\'Activity (processus setsid)</string>
+    <string name="sniffer_procedure_title">Procédure type</string>
+    <string name="sniffer_procedure_body">1. Appuie sur Démarrer\n2. Reproduis le bug à l\'écran\n3. Appuie sur Snapshot pour marquer l\'instant exact\n4. Appuie sur Arrêter\n5. Appuie sur Exporter pour partager le fichier (log + snap)\n6. Nettoyer : supprime les captures précédentes (la session courante est préservée)</string>
 
     <!-- Placeholders -->
     <string name="recon_placeholder">Recon DL5 — à implémenter (transplant de Dl5ClusterReconRunner depuis DashCast)</string>

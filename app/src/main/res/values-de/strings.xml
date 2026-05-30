@@ -10,9 +10,10 @@
     <string name="main_btn_fission">Fission test (projection)</string>
 
     <string name="sniffer_title">RE Sniffer</string>
+    <string name="sniffer_subtitle">Continuous logcat capture + dumpsys snapshots into an exportable file</string>
     <string name="sniffer_pill_active">● ACTIVE</string>
     <string name="sniffer_pill_inactive">○ INACTIVE</string>
-    <string name="sniffer_idle">No capture in progress.</string>
+    <string name="sniffer_idle">No capture in progress.\nPress Start to launch a new BYD_RE_Sniffer_*.txt file.</string>
     <string name="sniffer_initializing">Initializing…</string>
     <string name="sniffer_active_fmt">Capturing → %1$s</string>
     <string name="sniffer_active_detail_fmt">Resumed: %1$s (%2$d KB)</string>
@@ -32,6 +33,10 @@
     <string name="sniffer_btn_snapshot">Snapshot</string>
     <string name="sniffer_btn_export">Export</string>
     <string name="sniffer_btn_cleanup">Cleanup</string>
+    <string name="sniffer_content_title">Captured content</string>
+    <string name="sniffer_content_body">• Initial header: ro.product.model, fingerprint\n• Live: full logcat threadtime + events buffer (no filter, nothing missed)\n• Auto snap every 60 s (overwrites _snap.txt): dumpsys display, SurfaceFlinger, window, activity, meminfo, ps -A\n• Manual snapshot: marks the timestamp in the main log + refreshes the snap\n• Persistence: capture survives Activity rotation/destruction (setsid process)</string>
+    <string name="sniffer_procedure_title">Typical procedure</string>
+    <string name="sniffer_procedure_body">1. Press Start\n2. Reproduce the bug on screen\n3. Press Snapshot to mark the exact moment\n4. Press Stop\n5. Press Export to share the file (log + snap)\n6. Cleanup: deletes previous captures (current session is preserved)</string>
 
     <string name="recon_placeholder">DL5 Recon — TODO (transplant Dl5ClusterReconRunner from DashCast)</string>
     <string name="fission_placeholder">Fission test — TODO (transplant Dl5VdTestRunner + MirrorDaemon from DashCast)</string>

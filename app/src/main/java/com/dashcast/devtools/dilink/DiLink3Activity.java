@@ -354,6 +354,7 @@ public class DiLink3Activity extends AppCompatActivity {
 
         statusView.setText(glyph);
         statusView.setTextColor(color);
+        statusView.setBackgroundResource(DlPillBg.forStatus(statusName));
         elapView.setText(elapsedMs > 0 ? (elapsedMs + " ms") : "");
 
         if (message != null && !message.isEmpty()) {

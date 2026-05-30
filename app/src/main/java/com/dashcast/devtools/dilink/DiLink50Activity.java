@@ -29,8 +29,8 @@ import java.util.List;
 /**
  * DiLink 5.0 — activité diagnostique avec deux tabs :
  * <ul>
- *   <li>Recon → Dl5ClusterReconRunner (R01–R30)</li>
- *   <li>Fission → Dl5VdTestRunner (V01–V07, avec SurfaceView pour V05)</li>
+ *   <li>Recon → {@link DlReconRunner} (suite universelle commune à DL2/3/4/5)</li>
+ *   <li>Fission → {@link Dl5VdTestRunner} (V01–V07, avec SurfaceView pour V05)</li>
  * </ul>
  */
 public class DiLink50Activity extends AppCompatActivity {
@@ -38,13 +38,11 @@ public class DiLink50Activity extends AppCompatActivity {
     private static final String TAG = "DiLink50Activity";
     private static final int TAB_RECON   = 0;
     private static final int TAB_FISSION = 1;
-    private static final int TAB_SONDES  = 2;
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
     private TabLayout tabs;
     private View      panelRecon;
     private View      panelFission;
-    private View      panelSondes;
 
     // ── Recon views ───────────────────────────────────────────────────────────
     private TextView     tvReconSubtitle;
@@ -65,10 +63,10 @@ public class DiLink50Activity extends AppCompatActivity {
     private SurfaceView  svFissionCluster;
     private SurfaceHolder mVdSurfaceHolder;
 
-    // ── Recon state ───────────────────────────────────────────────────────────
+    // ── Recon state (universal DlReconRunner) ────────────────────────────────
     private boolean mReconRowsPrepared = false;
     private final List<View> mReconRowViews = new ArrayList<>();
-    private final List<DiLink5TestRunner.TestResult> mReconLastResults = new ArrayList<>();
+    private final List<DlReconRunner.TestResult> mReconLastResults = new ArrayList<>();
 
     // ── Fission state ─────────────────────────────────────────────────────────
     private boolean mFissionRowsPrepared = false;
@@ -79,17 +77,6 @@ public class DiLink50Activity extends AppCompatActivity {
     // ── Common ────────────────────────────────────────────────────────────────
     private boolean mDestroyed = false;
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
-
-    // ── Sondes (DlReconRunner) — state ─────────────────────────────────────────
-    private boolean mSondesRowsPrepared = false;
-    private final List<View>                     mSondesRowViews = new ArrayList<>();
-    private final List<DlReconRunner.TestResult> mSondesResults  = new ArrayList<>();
-    private View         mBtnSondesRun;
-    private View         mBtnSondesShare;
-    private TextView     mTvSondesSubtitle;
-    private TextView     mTvSondesPill;
-    private TextView     mTvSondesCounters;
-    private LinearLayout mLlSondesList;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -103,12 +90,10 @@ public class DiLink50Activity extends AppCompatActivity {
         tabs         = findViewById(R.id.tabs_dl50);
         panelRecon   = findViewById(R.id.panel_recon);
         panelFission = findViewById(R.id.panel_fission);
-        panelSondes  = findViewById(R.id.panel_sondes);
 
         // Onglets
         tabs.addTab(tabs.newTab().setText(R.string.diag_tab_recon));
         tabs.addTab(tabs.newTab().setText(R.string.diag_tab_fission));
-        tabs.addTab(tabs.newTab().setText(R.string.diag_dl50_tab_sondes));
         tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override public void onTabSelected(TabLayout.Tab tab)   { showPanel(tab.getPosition()); }
             @Override public void onTabUnselected(TabLayout.Tab tab) {}
@@ -117,7 +102,6 @@ public class DiLink50Activity extends AppCompatActivity {
 
         bindReconViews();
         bindFissionViews();
-        bindSondesViews();
         showPanel(TAB_RECON);
     }
 
@@ -139,10 +123,8 @@ public class DiLink50Activity extends AppCompatActivity {
     private void showPanel(int pos) {
         panelRecon.setVisibility(pos == TAB_RECON    ? View.VISIBLE : View.GONE);
         panelFission.setVisibility(pos == TAB_FISSION ? View.VISIBLE : View.GONE);
-        panelSondes.setVisibility(pos == TAB_SONDES  ? View.VISIBLE : View.GONE);
         if (pos == TAB_RECON)   prepareReconRowsIfNeeded();
         if (pos == TAB_FISSION) prepareFissionRowsIfNeeded();
-        if (pos == TAB_SONDES)  { bindSondesHeader(); prepareSondesRowsIfNeeded(); }
     }
 
     // ── Recon panel ───────────────────────────────────────────────────────────
@@ -165,7 +147,7 @@ public class DiLink50Activity extends AppCompatActivity {
 
         btnReconRunAll.setOnClickListener(v -> runReconAllTests());
         btnReconShare.setOnClickListener(v -> AppLogger.shareWithReport(this,
-                Dl5ClusterReconRunner.renderReport(mReconLastResults)));
+                DlReconRunner.buildReport(mReconLastResults)));
         btnReconShare.setEnabled(false);
     }
 
@@ -176,11 +158,10 @@ public class DiLink50Activity extends AppCompatActivity {
         mReconLastResults.clear();
         llReconTestList.removeAllViews();
         LayoutInflater inflater = LayoutInflater.from(this);
-        for (DiLink5TestRunner.TestDef def : Dl5ClusterReconRunner.catalog()) {
+        for (DlReconRunner.TestDef def : DlReconRunner.catalog()) {
             View row = inflater.inflate(R.layout.item_test_row, llReconTestList, false);
-            DiLink5TestRunner.TestResult r = new DiLink5TestRunner.TestResult(def);
-            r.status = DiLink5TestRunner.Status.PENDING;
-            bindDl5Row(row, r);
+            DlReconRunner.TestResult r = new DlReconRunner.TestResult(def);
+            bindReconRow(row, r);
             llReconTestList.addView(row);
             mReconRowViews.add(row);
             mReconLastResults.add(r);
@@ -188,26 +169,25 @@ public class DiLink50Activity extends AppCompatActivity {
     }
 
     private void runReconAllTests() {
-        prepareReconRowsFor(Dl5ClusterReconRunner.catalog(), mReconRowViews, mReconLastResults, llReconTestList);
         btnReconRunAll.setEnabled(false);
         btnReconShare.setEnabled(false);
         tvReconCounters.setText(R.string.diag_counters_running);
-        Dl5ClusterReconRunner.runAll(this, new Dl5ClusterReconRunner.Listener() {
-            @Override public void onSuiteStarted(List<DiLink5TestRunner.TestResult> results) {
+        DlReconRunner.runAll(this, new DlReconRunner.Listener() {
+            @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
                 safeRun(() -> {
                     mReconLastResults.clear(); mReconLastResults.addAll(results);
                     for (int i = 0; i < results.size() && i < mReconRowViews.size(); i++)
-                        bindDl5Row(mReconRowViews.get(i), results.get(i));
+                        bindReconRow(mReconRowViews.get(i), results.get(i));
                 });
             }
-            @Override public void onTestUpdated(int index, DiLink5TestRunner.TestResult result) {
+            @Override public void onTestUpdated(int index, DlReconRunner.TestResult result) {
                 safeRun(() -> {
                     if (index < mReconLastResults.size()) mReconLastResults.set(index, result);
-                    if (index < mReconRowViews.size()) bindDl5Row(mReconRowViews.get(index), result);
+                    if (index < mReconRowViews.size()) bindReconRow(mReconRowViews.get(index), result);
                     updateReconCounters();
                 });
             }
-            @Override public void onSuiteFinished(List<DiLink5TestRunner.TestResult> results) {
+            @Override public void onSuiteFinished(List<DlReconRunner.TestResult> results) {
                 safeRun(() -> {
                     btnReconRunAll.setEnabled(true);
                     btnReconShare.setEnabled(true);
@@ -219,7 +199,7 @@ public class DiLink50Activity extends AppCompatActivity {
 
     private void updateReconCounters() {
         int pass = 0, fail = 0, skip = 0, warn = 0;
-        for (DiLink5TestRunner.TestResult r : mReconLastResults) {
+        for (DlReconRunner.TestResult r : mReconLastResults) {
             switch (r.status) {
                 case PASS: pass++; break; case FAIL: fail++; break;
                 case SKIPPED: skip++; break; case WARN: warn++; break;
@@ -227,6 +207,34 @@ public class DiLink50Activity extends AppCompatActivity {
             }
         }
         tvReconCounters.setText(getString(R.string.diag_counters_warn_fmt, pass, fail, warn, skip));
+    }
+
+    private void bindReconRow(View row, DlReconRunner.TestResult r) {
+        ((TextView) row.findViewById(R.id.tv_test_id)).setText(r.def.id);
+        ((TextView) row.findViewById(R.id.tv_test_title)).setText(r.def.title);
+        ((TextView) row.findViewById(R.id.tv_test_description)).setText(r.def.description);
+        TextView sv = row.findViewById(R.id.tv_test_status);
+        TextView mv = row.findViewById(R.id.tv_test_message);
+        TextView ev = row.findViewById(R.id.tv_test_elapsed);
+        String glyph; int color;
+        switch (r.status) {
+            case PASS:    glyph = "✓"; color = 0xFF4CAF50; break;
+            case FAIL:    glyph = "✗"; color = 0xFFE53935; break;
+            case WARN:    glyph = "!"; color = 0xFFFFB300; break;
+            case SKIPPED: glyph = "⊘"; color = 0xFF9E9E9E; break;
+            case RUNNING: glyph = "…"; color = 0xFFFFB300; break;
+            default:      glyph = "·"; color = 0xFF607D8B; break;
+        }
+        sv.setText(glyph); sv.setTextColor(color);
+        sv.setBackgroundResource(DlPillBg.forStatus(r.status.name()));
+        ev.setText(r.elapsedMs > 0 ? r.elapsedMs + " ms" : "");
+        if (r.message != null && !r.message.isEmpty()) {
+            mv.setVisibility(View.VISIBLE); mv.setText(r.message);
+            int tc; switch (r.status) {
+                case FAIL: tc = 0xFFE53935; break; case PASS: tc = 0xFF4CAF50; break;
+                case WARN: tc = 0xFFFFB300; break; default: tc = 0xFF9E9E9E; break;
+            } mv.setTextColor(tc);
+        } else { mv.setVisibility(View.GONE); }
     }
 
     // ── Fission panel ─────────────────────────────────────────────────────────
@@ -440,6 +448,7 @@ public class DiLink50Activity extends AppCompatActivity {
         }
         statusView.setText(glyph);
         statusView.setTextColor(color);
+        statusView.setBackgroundResource(DlPillBg.forStatus(r.status.name()));
         elapView.setText(r.elapsedMs > 0 ? (r.elapsedMs + " ms") : "");
 
         if (r.message != null && !r.message.isEmpty()) {
@@ -458,127 +467,9 @@ public class DiLink50Activity extends AppCompatActivity {
         }
     }
 
-    // ── Sondes panel (DlReconRunner) ──────────────────────────────────────────
+    // ── (Sondes panel supprimé — Recon utilise désormais DlReconRunner directement) ─
 
-    private void bindSondesViews() {
-        mTvSondesSubtitle = panelSondes.findViewById(R.id.tv_dl50_sondes_subtitle);
-        mTvSondesPill     = panelSondes.findViewById(R.id.tv_dl50_sondes_pill);
-        mTvSondesCounters = panelSondes.findViewById(R.id.tv_dl50_sondes_counters);
-        mBtnSondesRun      = panelSondes.findViewById(R.id.btn_dl50_sondes_run);
-        mBtnSondesShare    = panelSondes.findViewById(R.id.btn_dl50_sondes_share);
-        mLlSondesList      = panelSondes.findViewById(R.id.ll_dl50_sondes_list);
-        mBtnSondesRun.setOnClickListener(v -> runSondesTests());
-        mBtnSondesShare.setOnClickListener(v ->
-                AppLogger.shareWithReport(this, DlReconRunner.buildReport(mSondesResults)));
-        mBtnSondesShare.setEnabled(false);
-    }
-
-    private void bindSondesHeader() {
-        Platform p = Platform.get();
-        String prod = p.rawProductName();
-        if (prod == null || prod.isEmpty()) prod = "?";
-        mTvSondesSubtitle.setText(getString(R.string.diag_platform_subtitle_fmt, prod, p.androidApi()));
-        mTvSondesPill.setText(p.isDiLink5(this)
-                ? getString(R.string.diag_dl50_pill_detected)
-                : getString(R.string.diag_dl50_pill_unknown));
-        mTvSondesCounters.setText(R.string.diag_counters_idle);
-    }
-
-    private void prepareSondesRowsIfNeeded() {
-        if (mSondesRowsPrepared) return;
-        mSondesRowsPrepared = true;
-        mLlSondesList.removeAllViews();
-        mSondesRowViews.clear();
-        mSondesResults.clear();
-        LayoutInflater inf = LayoutInflater.from(this);
-        for (DlReconRunner.TestDef def : DlReconRunner.catalog()) {
-            View row = inf.inflate(R.layout.item_test_row, mLlSondesList, false);
-            DlReconRunner.TestResult r = new DlReconRunner.TestResult(def);
-            bindSondesRow(row, r);
-            mLlSondesList.addView(row);
-            mSondesRowViews.add(row);
-            mSondesResults.add(r);
-        }
-    }
-
-    private void bindSondesRow(View row, DlReconRunner.TestResult r) {
-        ((TextView) row.findViewById(R.id.tv_test_id)).setText(r.def.id);
-        ((TextView) row.findViewById(R.id.tv_test_title)).setText(r.def.title);
-        ((TextView) row.findViewById(R.id.tv_test_description)).setText(r.def.description);
-        TextView sv = row.findViewById(R.id.tv_test_status);
-        TextView mv = row.findViewById(R.id.tv_test_message);
-        TextView ev = row.findViewById(R.id.tv_test_elapsed);
-        String glyph; int color;
-        switch (r.status) {
-            case PASS:    glyph = "✓"; color = 0xFF4CAF50; break;
-            case FAIL:    glyph = "✗"; color = 0xFFE53935; break;
-            case WARN:    glyph = "!"; color = 0xFFFFB300; break;
-            case SKIPPED: glyph = "⊘"; color = 0xFF9E9E9E; break;
-            case RUNNING: glyph = "…"; color = 0xFFFFB300; break;
-            default:      glyph = "·"; color = 0xFF607D8B; break;
-        }
-        sv.setText(glyph); sv.setTextColor(color);
-        ev.setText(r.elapsedMs > 0 ? r.elapsedMs + " ms" : "");
-        if (r.message != null && !r.message.isEmpty()) {
-            mv.setVisibility(View.VISIBLE); mv.setText(r.message);
-            int tc; switch (r.status) {
-                case FAIL: tc = 0xFFE53935; break; case PASS: tc = 0xFF4CAF50; break;
-                case WARN: tc = 0xFFFFB300; break; default: tc = 0xFF9E9E9E; break;
-            } mv.setTextColor(tc);
-        } else { mv.setVisibility(View.GONE); }
-    }
-
-    private void runSondesTests() {
-        mBtnSondesRun.setEnabled(false);
-        mBtnSondesShare.setEnabled(false);
-        mTvSondesCounters.setText(R.string.diag_counters_running);
-        DlReconRunner.runAll(this, new DlReconRunner.Listener() {
-            @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
-                safeRun(() -> {
-                    mSondesResults.clear(); mSondesResults.addAll(results);
-                    for (int i = 0; i < results.size() && i < mSondesRowViews.size(); i++)
-                        bindSondesRow(mSondesRowViews.get(i), results.get(i));
-                });
-            }
-            @Override public void onTestUpdated(int idx, DlReconRunner.TestResult r) {
-                safeRun(() -> {
-                    if (idx < mSondesResults.size()) mSondesResults.set(idx, r);
-                    if (idx < mSondesRowViews.size()) bindSondesRow(mSondesRowViews.get(idx), r);
-                    updateSondesCounters();
-                });
-            }
-            @Override public void onSuiteFinished(List<DlReconRunner.TestResult> results) {
-                safeRun(() -> {
-                    mBtnSondesRun.setEnabled(true);
-                    mBtnSondesShare.setEnabled(true);
-                    updateSondesCounters();
-                });
-            }
-        });
-    }
-
-    private void updateSondesCounters() {
-        int pass = 0, fail = 0, warn = 0, skip = 0;
-        for (DlReconRunner.TestResult r : mSondesResults) {
-            switch (r.status) {
-                case PASS: pass++; break; case FAIL: fail++; break;
-                case WARN: warn++; break; case SKIPPED: skip++; break; default: break;
-            }
-        }
-        mTvSondesCounters.setText(warn > 0
-                ? getString(R.string.diag_counters_warn_fmt, pass, fail, warn, skip)
-                : getString(R.string.diag_counters_fmt, pass, fail, skip));
-    }
-
-    private void copySondesReport_unused() {
-        if (mSondesResults.isEmpty()) {
-            Toast.makeText(this, R.string.diag_toast_no_results, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        AppLogger.shareWithReport(this, DlReconRunner.buildReport(mSondesResults));
-    }
-
-    // ── Lifecycle guard ───────────────────────────────────────────────────────
+    // ── Lifecycle guard ────────────────────────────────────────────────────────────
 
     private void safeRun(Runnable r) {
         if (mDestroyed) return;
