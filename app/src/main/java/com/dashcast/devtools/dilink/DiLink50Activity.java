@@ -87,6 +87,7 @@ public class DiLink50Activity extends AppCompatActivity {
     private final List<DlReconRunner.TestResult> mSondesResults  = new ArrayList<>();
     private View         mBtnSondesRun;
     private View         mBtnSondesCopy;
+    private View         mBtnSondesTelegram;
     private TextView     mTvSondesSubtitle;
     private TextView     mTvSondesPill;
     private TextView     mTvSondesCounters;
@@ -553,6 +554,7 @@ public class DiLink50Activity extends AppCompatActivity {
     private void runSondesTests() {
         mBtnSondesRun.setEnabled(false);
         mBtnSondesCopy.setEnabled(false);
+        mBtnSondesTelegram.setEnabled(false);
         mTvSondesCounters.setText(R.string.diag_counters_running);
         DlReconRunner.runAll(this, new DlReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
@@ -573,6 +575,7 @@ public class DiLink50Activity extends AppCompatActivity {
                 safeRun(() -> {
                     mBtnSondesRun.setEnabled(true);
                     mBtnSondesCopy.setEnabled(true);
+                    mBtnSondesTelegram.setEnabled(true);
                     updateSondesCounters();
                 });
             }

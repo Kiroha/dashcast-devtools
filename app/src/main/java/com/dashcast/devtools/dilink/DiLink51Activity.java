@@ -37,6 +37,7 @@ public class DiLink51Activity extends AppCompatActivity {
     private TextView     mTvCounters;
     private View         mBtnRun;
     private View         mBtnCopy;
+    private View         mBtnTelegram;
     private LinearLayout mLlList;
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -163,6 +164,7 @@ public class DiLink51Activity extends AppCompatActivity {
     private void runTests() {
         mBtnRun.setEnabled(false);
         mBtnCopy.setEnabled(false);
+        mBtnTelegram.setEnabled(false);
         mTvCounters.setText(R.string.diag_counters_running);
         DlReconRunner.runAll(this, new DlReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
@@ -183,6 +185,7 @@ public class DiLink51Activity extends AppCompatActivity {
                 safeRun(() -> {
                     mBtnRun.setEnabled(true);
                     mBtnCopy.setEnabled(true);
+                    mBtnTelegram.setEnabled(true);
                     updateCounters();
                 });
             }

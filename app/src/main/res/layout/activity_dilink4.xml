@@ -293,6 +293,14 @@
                                 android:layout_height="wrap_content"
                                 android:layout_marginStart="8dp"
                                 android:text="@string/diag_copy_report"/>
+
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_dl4_recon_telegram"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/diag_send_telegram"/>
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>

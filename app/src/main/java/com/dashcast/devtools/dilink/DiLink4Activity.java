@@ -49,6 +49,7 @@ public class DiLink4Activity extends AppCompatActivity {
     private TextView     mReconCounters_dl4;
     private View         mBtnReconRun_dl4;
     private View         mBtnReconCopy_dl4;
+    private View         mBtnReconTelegram_dl4;
     private LinearLayout mReconList_dl4;
 
     // ── Recon panel — state ───────────────────────────────────────────────────
@@ -62,10 +63,13 @@ public class DiLink4Activity extends AppCompatActivity {
         mReconCounters_dl4   = findViewById(R.id.tv_dl4_recon_counters);
         mBtnReconRun_dl4     = findViewById(R.id.btn_dl4_recon_run);
         mBtnReconCopy_dl4    = findViewById(R.id.btn_dl4_recon_copy);
+        mBtnReconTelegram_dl4 = findViewById(R.id.btn_dl4_recon_telegram);
         mReconList_dl4       = findViewById(R.id.ll_dl4_recon_list);
         mBtnReconRun_dl4.setOnClickListener(v -> runRecon_dl4());
         mBtnReconCopy_dl4.setOnClickListener(v -> copyRecon_dl4());
         mBtnReconCopy_dl4.setEnabled(false);
+        mBtnReconTelegram_dl4.setOnClickListener(v -> AppLogger.shareReportToTelegram(this, DlReconRunner.buildReport(mReconResults_dl4)));
+        mBtnReconTelegram_dl4.setEnabled(false);
     }
 
     private void showReconPanel_dl4(boolean show) {
@@ -127,6 +131,7 @@ public class DiLink4Activity extends AppCompatActivity {
     private void runRecon_dl4() {
         mBtnReconRun_dl4.setEnabled(false);
         mBtnReconCopy_dl4.setEnabled(false);
+        mBtnReconTelegram_dl4.setEnabled(false);
         mReconCounters_dl4.setText(R.string.diag_counters_running);
         DlReconRunner.runAll(this, new DlReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
@@ -142,7 +147,7 @@ public class DiLink4Activity extends AppCompatActivity {
                 });
             }
             @Override public void onSuiteFinished(List<DlReconRunner.TestResult> results) {
-                safeRun(() -> { mBtnReconRun_dl4.setEnabled(true); mBtnReconCopy_dl4.setEnabled(true); updateReconCounters_dl4(); });
+                safeRun(() -> { mBtnReconRun_dl4.setEnabled(true); mBtnReconCopy_dl4.setEnabled(true); mBtnReconTelegram_dl4.setEnabled(true); updateReconCounters_dl4(); });
             }
         });
     }

@@ -183,15 +183,12 @@ public class SnifferActivity extends Activity {
                     "while [ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ]; do sleep 10;"
                     + " echo >> " + p + ";"
                     + " printf \"=== SNAP %s ===\\n\" $(date +%H:%M:%S) >> " + p + ";"
-                    + " dumpsys display 2>/dev/null"
-                    + "   | grep -E \"mDisplayId|mName|mState|fission|virtual|cluster|layerStack\""
-                    + "   >> " + p + ";"
-                    + " dumpsys SurfaceFlinger 2>/dev/null"
-                    + "   | grep -iE \"display|fission|layer|cluster|mirror|virtual|qt\""
-                    + "   | head -30 >> " + p + ";"
-                    + " ps -A 2>/dev/null"
-                    + "   | grep -iE \"byd|xdja|daemon|dilink|qt|cluster|app_process\""
-                    + "   >> " + p + ";"
+                    + " dumpsys display 2>/dev/null >> " + p + ";"
+                    + " dumpsys SurfaceFlinger 2>/dev/null >> " + p + ";"
+                    + " dumpsys window 2>/dev/null >> " + p + ";"
+                    + " dumpsys activity 2>/dev/null >> " + p + ";"
+                    + " dumpsys meminfo 2>/dev/null >> " + p + ";"
+                    + " ps -A 2>/dev/null >> " + p + ";"
                     + " done";
 
                 String bgCmd =
@@ -255,7 +252,10 @@ public class SnifferActivity extends Activity {
               "echo >> " + p
             + " ; printf '=== USER SNAP %s ===\\n' $(date +%H:%M:%S) >> " + p
             + " ; dumpsys display 2>/dev/null >> " + p
-            + " ; dumpsys SurfaceFlinger 2>/dev/null | head -200 >> " + p
+            + " ; dumpsys SurfaceFlinger 2>/dev/null >> " + p
+            + " ; dumpsys window 2>/dev/null >> " + p
+            + " ; dumpsys activity 2>/dev/null >> " + p
+            + " ; dumpsys meminfo 2>/dev/null >> " + p
             + " ; ps -A 2>/dev/null >> " + p;
         AdbClient.executeShell(this, cmd);
         Toast.makeText(getApplicationContext(),

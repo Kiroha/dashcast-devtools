@@ -53,6 +53,7 @@ public class DiLink3Activity extends AppCompatActivity {
     private TextView     tvRecon3Counters;
     private View         btnRecon3RunAll;
     private View         btnRecon3CopyReport;
+    private View         btnRecon3SendTelegram;
     private LinearLayout llRecon3TestList;
 
     // ── State — Screen88 ──────────────────────────────────────────────────────
@@ -302,6 +303,7 @@ public class DiLink3Activity extends AppCompatActivity {
     private void runReconTests() {
         btnRecon3RunAll.setEnabled(false);
         btnRecon3CopyReport.setEnabled(false);
+        btnRecon3SendTelegram.setEnabled(false);
         tvRecon3Counters.setText(R.string.diag_counters_running);
         DlReconRunner.runAll(this, new DlReconRunner.Listener() {
             @Override public void onSuiteStarted(List<DlReconRunner.TestResult> results) {
@@ -322,6 +324,7 @@ public class DiLink3Activity extends AppCompatActivity {
                 safeRun(() -> {
                     btnRecon3RunAll.setEnabled(true);
                     btnRecon3CopyReport.setEnabled(true);
+                    btnRecon3SendTelegram.setEnabled(true);
                     updateReconCounters();
                 });
             }
