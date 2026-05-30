@@ -107,13 +107,17 @@ public class DiLink3Activity extends AppCompatActivity {
         tvRecon3Subtitle   = findViewById(R.id.tv_recon3_subtitle);
         tvRecon3Pill       = findViewById(R.id.tv_recon3_pill);
         tvRecon3Counters   = findViewById(R.id.tv_recon3_counters);
-        btnRecon3RunAll    = findViewById(R.id.btn_recon3_run_all);
-        btnRecon3CopyReport= findViewById(R.id.btn_recon3_copy_report);
-        llRecon3TestList   = findViewById(R.id.ll_recon3_test_list);
+        btnRecon3RunAll       = findViewById(R.id.btn_recon3_run_all);
+        btnRecon3CopyReport   = findViewById(R.id.btn_recon3_copy_report);
+        btnRecon3SendTelegram = findViewById(R.id.btn_recon3_send_telegram);
+        llRecon3TestList      = findViewById(R.id.ll_recon3_test_list);
 
         btnRecon3RunAll.setOnClickListener(v -> runReconTests());
         btnRecon3CopyReport.setOnClickListener(v -> copyReconReport());
+        btnRecon3SendTelegram.setOnClickListener(v ->
+                AppLogger.shareReportToTelegram(this, DlReconRunner.buildReport(mReconResults)));
         btnRecon3CopyReport.setEnabled(false);
+        btnRecon3SendTelegram.setEnabled(false);
 
         showPanel(TAB_SCREEN88);
     }

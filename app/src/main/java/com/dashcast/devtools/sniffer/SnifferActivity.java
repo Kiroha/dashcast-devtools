@@ -18,6 +18,7 @@ import com.google.android.material.appbar.MaterialToolbar;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.Locale;
 
@@ -162,6 +163,11 @@ public class SnifferActivity extends Activity {
         setUiActive(false, getString(R.string.sniffer_initializing));
         btnStart.setEnabled(false);
 
+        // Snap file : état courant, écrasé à chaque cycle (jamais cumulatif)
+        final String pSnap    = p.replace(".txt", "_snap.txt");
+        final String pSnapTmp = pSnap + ".tmp";
+
+        // Header : uniquement logcat — les dumpsys vont dans le snap file séparé
         String headerCmd =
             "logcat -c 2>/dev/null"
             + " ; touch /data/local/tmp/" + RE_SNIFFER_TAG
@@ -169,35 +175,40 @@ public class SnifferActivity extends Activity {
             + " ; date >> " + p
             + " ; getprop ro.product.model >> " + p
             + " ; getprop ro.build.fingerprint >> " + p
-            + " ; echo --- DISPLAYS INITIAL --- >> " + p
-            + " ; dumpsys display 2>/dev/null >> " + p
-            + " ; echo --- SURFACEFLINGER INITIAL --- >> " + p
-            + " ; dumpsys SurfaceFlinger 2>/dev/null >> " + p
-            + " ; echo --- PROCESSUS INITIAL --- >> " + p
-            + " ; ps -A 2>/dev/null >> " + p
-            + " ; echo === LIVE CAPTURE START === >> " + p;
+            + " ; echo === LIVE CAPTURE START === >> " + p
+            // Snapshot initial → snap file (overwrite)
+            + " ; printf '=== SNAP INITIAL %s ===\\n' $(date +%H:%M:%S) > " + pSnapTmp
+            + " ; dumpsys display 2>/dev/null >> " + pSnapTmp
+            + " ; dumpsys SurfaceFlinger 2>/dev/null >> " + pSnapTmp
+            + " ; dumpsys window 2>/dev/null >> " + pSnapTmp
+            + " ; dumpsys activity 2>/dev/null >> " + pSnapTmp
+            + " ; dumpsys meminfo 2>/dev/null >> " + pSnapTmp
+            + " ; ps -A 2>/dev/null >> " + pSnapTmp
+            + " ; mv " + pSnapTmp + " " + pSnap;
 
         AdbClient.executeShellWithResult(this, headerCmd, new AdbClient.Callback() {
             @Override public void onSuccess(String out) {
+                // Snap loop : écrase le snap file toutes les 60s (via tmp pour atomicité)
                 String snapLoop =
-                    "while [ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ]; do sleep 10;"
-                    + " echo >> " + p + ";"
-                    + " printf \"=== SNAP %s ===\\n\" $(date +%H:%M:%S) >> " + p + ";"
-                    + " dumpsys display 2>/dev/null >> " + p + ";"
-                    + " dumpsys SurfaceFlinger 2>/dev/null >> " + p + ";"
-                    + " dumpsys window 2>/dev/null >> " + p + ";"
-                    + " dumpsys activity 2>/dev/null >> " + p + ";"
-                    + " dumpsys meminfo 2>/dev/null >> " + p + ";"
-                    + " ps -A 2>/dev/null >> " + p + ";"
+                    "while [ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ]; do sleep 60;"
+                    + " printf '=== SNAP %s ===\\n' $(date +%H:%M:%S) > " + pSnapTmp + ";"
+                    + " dumpsys display 2>/dev/null >> " + pSnapTmp + ";"
+                    + " dumpsys SurfaceFlinger 2>/dev/null >> " + pSnapTmp + ";"
+                    + " dumpsys window 2>/dev/null >> " + pSnapTmp + ";"
+                    + " dumpsys activity 2>/dev/null >> " + pSnapTmp + ";"
+                    + " dumpsys meminfo 2>/dev/null >> " + pSnapTmp + ";"
+                    + " ps -A 2>/dev/null >> " + pSnapTmp + ";"
+                    + " mv " + pSnapTmp + " " + pSnap + ";"
                     + " done";
 
+                // exec : remplace le shell par logcat — kill -9 $pid tue logcat directement
                 String bgCmd =
                     "echo > " + pf
-                    + " ; setsid sh -c 'logcat -v threadtime >> " + p + " 2>&1'"
+                    + " ; setsid sh -c 'exec logcat -v threadtime >> " + p + " 2>&1'"
                     + "   & echo $! >> " + pf
                     + " ; setsid sh -c '" + snapLoop + "'"
                     + "   & echo $! >> " + pf
-                    + " ; setsid sh -c 'logcat -b events -v time >> " + p + " 2>&1'"
+                    + " ; setsid sh -c 'exec logcat -b events -v time >> " + p + " 2>&1'"
                     + "   & echo $! >> " + pf;
 
                 AdbClient.executeShell(SnifferActivity.this, bgCmd);
@@ -247,17 +258,22 @@ public class SnifferActivity extends Activity {
 
     private void snapshotSniffer() {
         if (mSnifferFile == null) return;
-        final String p = mSnifferFile.getAbsolutePath();
-        String cmd =
-              "echo >> " + p
-            + " ; printf '=== USER SNAP %s ===\\n' $(date +%H:%M:%S) >> " + p
-            + " ; dumpsys display 2>/dev/null >> " + p
-            + " ; dumpsys SurfaceFlinger 2>/dev/null >> " + p
-            + " ; dumpsys window 2>/dev/null >> " + p
-            + " ; dumpsys activity 2>/dev/null >> " + p
-            + " ; dumpsys meminfo 2>/dev/null >> " + p
-            + " ; ps -A 2>/dev/null >> " + p;
-        AdbClient.executeShell(this, cmd);
+        final String p       = mSnifferFile.getAbsolutePath();
+        final String pSnap    = p.replace(".txt", "_snap.txt");
+        final String pSnapTmp = pSnap + ".tmp";
+        // Marquer l'instant dans le log principal (une seule ligne, pas de dumpsys)
+        String cmdLog = "printf '\\n=== USER SNAP %s ===\\n' $(date +%H:%M:%S) >> " + p;
+        // Écraser le snap file avec l'état courant (via tmp pour atomicité)
+        String cmdSnap =
+              "printf '=== USER SNAP %s ===\\n' $(date +%H:%M:%S) > " + pSnapTmp
+            + " ; dumpsys display 2>/dev/null >> " + pSnapTmp
+            + " ; dumpsys SurfaceFlinger 2>/dev/null >> " + pSnapTmp
+            + " ; dumpsys window 2>/dev/null >> " + pSnapTmp
+            + " ; dumpsys activity 2>/dev/null >> " + pSnapTmp
+            + " ; dumpsys meminfo 2>/dev/null >> " + pSnapTmp
+            + " ; ps -A 2>/dev/null >> " + pSnapTmp
+            + " ; mv " + pSnapTmp + " " + pSnap;
+        AdbClient.executeShell(this, cmdLog + " ; " + cmdSnap);
         Toast.makeText(getApplicationContext(),
                 getString(R.string.sniffer_toast_snapshot), Toast.LENGTH_SHORT).show();
     }
@@ -269,12 +285,24 @@ public class SnifferActivity extends Activity {
             return;
         }
         try {
-            Uri uri = FileProvider.getUriForFile(this,
-                    "com.dashcast.devtools.fileprovider", mSnifferFile);
-            Intent send = new Intent(Intent.ACTION_SEND);
+            ArrayList<Uri> uris = new ArrayList<>();
+            uris.add(FileProvider.getUriForFile(this,
+                    "com.dashcast.devtools.fileprovider", mSnifferFile));
+            File snapFile = new File(mSnifferFile.getAbsolutePath().replace(".txt", "_snap.txt"));
+            if (snapFile.exists() && snapFile.length() > 0) {
+                uris.add(FileProvider.getUriForFile(this,
+                        "com.dashcast.devtools.fileprovider", snapFile));
+            }
+            Intent send;
+            if (uris.size() > 1) {
+                send = new Intent(Intent.ACTION_SEND_MULTIPLE);
+                send.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
+            } else {
+                send = new Intent(Intent.ACTION_SEND);
+                send.putExtra(Intent.EXTRA_STREAM, uris.get(0));
+                send.putExtra(Intent.EXTRA_SUBJECT, mSnifferFile.getName());
+            }
             send.setType("text/plain");
-            send.putExtra(Intent.EXTRA_STREAM, uri);
-            send.putExtra(Intent.EXTRA_SUBJECT, mSnifferFile.getName());
             send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             startActivity(Intent.createChooser(send, getString(R.string.sniffer_export_chooser)));
         } catch (Exception e) {
@@ -289,10 +317,16 @@ public class SnifferActivity extends Activity {
         File dir = getExternalFilesDir(null);
         if (dir == null) dir = getFilesDir();
         int deleted = 0;
+        // Exclure le log ET le snap file de la session courante
+        String currentSnapPath = mSnifferFile != null
+                ? mSnifferFile.getAbsolutePath().replace(".txt", "_snap.txt") : null;
         File[] all = dir.listFiles();
         if (all != null) {
             for (File f : all) {
-                if (f.getName().startsWith(RE_SNIFFER_PREFIX) && !f.equals(mSnifferFile)) {
+                if (f.getName().startsWith(RE_SNIFFER_PREFIX)
+                        && !f.equals(mSnifferFile)
+                        && (currentSnapPath == null
+                                || !f.getAbsolutePath().equals(currentSnapPath))) {
                     if (f.delete()) deleted++;
                 }
             }

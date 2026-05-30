@@ -98,9 +98,10 @@ public class DiLink51Activity extends AppCompatActivity {
         mTvSubtitle = findViewById(R.id.tv_dl51_recon_subtitle);
         mTvPill     = findViewById(R.id.tv_dl51_recon_pill);
         mTvCounters = findViewById(R.id.tv_dl51_recon_counters);
-        mBtnRun     = findViewById(R.id.btn_dl51_recon_run);
-        mBtnCopy    = findViewById(R.id.btn_dl51_recon_copy);
-        mLlList     = findViewById(R.id.ll_dl51_recon_list);
+        mBtnRun      = findViewById(R.id.btn_dl51_recon_run);
+        mBtnCopy     = findViewById(R.id.btn_dl51_recon_copy);
+        mBtnTelegram = findViewById(R.id.btn_dl51_recon_telegram);
+        mLlList      = findViewById(R.id.ll_dl51_recon_list);
         mBtnRun.setOnClickListener(v -> runTests());
         mBtnCopy.setOnClickListener(v -> copyReport());
         mBtnCopy.setEnabled(false);

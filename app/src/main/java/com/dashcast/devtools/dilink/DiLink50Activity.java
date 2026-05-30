@@ -488,12 +488,16 @@ public class DiLink50Activity extends AppCompatActivity {
         mTvSondesSubtitle = panelSondes.findViewById(R.id.tv_dl50_sondes_subtitle);
         mTvSondesPill     = panelSondes.findViewById(R.id.tv_dl50_sondes_pill);
         mTvSondesCounters = panelSondes.findViewById(R.id.tv_dl50_sondes_counters);
-        mBtnSondesRun     = panelSondes.findViewById(R.id.btn_dl50_sondes_run);
-        mBtnSondesCopy    = panelSondes.findViewById(R.id.btn_dl50_sondes_copy);
-        mLlSondesList     = panelSondes.findViewById(R.id.ll_dl50_sondes_list);
+        mBtnSondesRun      = panelSondes.findViewById(R.id.btn_dl50_sondes_run);
+        mBtnSondesCopy     = panelSondes.findViewById(R.id.btn_dl50_sondes_copy);
+        mBtnSondesTelegram = panelSondes.findViewById(R.id.btn_dl50_sondes_telegram);
+        mLlSondesList      = panelSondes.findViewById(R.id.ll_dl50_sondes_list);
         mBtnSondesRun.setOnClickListener(v -> runSondesTests());
         mBtnSondesCopy.setOnClickListener(v -> copySondesReport());
+        mBtnSondesTelegram.setOnClickListener(v ->
+                AppLogger.shareReportToTelegram(this, DlReconRunner.buildReport(mSondesResults)));
         mBtnSondesCopy.setEnabled(false);
+        mBtnSondesTelegram.setEnabled(false);
     }
 
     private void bindSondesHeader() {
