@@ -1,0 +1,80 @@
+apply plugin: 'com.android.application'
+
+android {
+    signingConfigs {
+        // Same BYD platform key as MyBYDApp/DashCast — required for signature
+        // permissions (INTERNAL_SYSTEM_WINDOW, INJECT_EVENTS, ACCESS_SURFACE_FLINGER…)
+        bydPlatform {
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+            storeFile file('./keystore/platform.keystore')
+            storePassword 'android'
+        }
+    }
+
+    compileSdkVersion 33
+
+    defaultConfig {
+        applicationId "com.dashcast.devtools"
+        minSdkVersion 28
+        targetSdkVersion 29
+        versionCode 1
+        versionName "0.1.0-alpha"
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.bydPlatform
+        }
+        release {
+            signingConfig signingConfigs.bydPlatform
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            outputFileName = "DashCastDevTools-v${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
+
+    lintOptions {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+
+    packagingOptions {
+        exclude 'META-INF/LICENSE.md'
+        exclude 'META-INF/LICENSE.txt'
+        exclude 'META-INF/LICENSE-notice.md'
+        exclude 'META-INF/NOTICE.md'
+        exclude 'META-INF/NOTICE.txt'
+        exclude 'META-INF/DEPENDENCIES'
+        exclude 'META-INF/*.kotlin_module'
+    }
+}
+
+configurations.all {
+    // dadb 1.2.7 pulls kotlin-stdlib-jdk7/jdk8 1.6.0; AndroidX pulls stdlib 1.8.x.
+    // Force a single stdlib lineage to avoid duplicate class errors.
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.10'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.10'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.10'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-common:1.8.10'
+    }
+}
+
+dependencies {
+    // API-29 compatible versions, aligned on DashCast (avoid pulling kotlin-stdlib 1.9+)
+    implementation 'androidx.appcompat:appcompat:1.1.0'
+    implementation 'com.google.android.material:material:1.9.0'
+
+    // dadb — local ADB client (same dep as DashCast for shell access)
+    implementation 'dev.mobile:dadb:1.2.7'
+}

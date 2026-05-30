@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="32dp"
+    android:background="#121212">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/app_name"
+        android:textSize="28sp"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/main_subtitle"
+        android:textSize="14sp"
+        android:textColor="#BBBBBB"
+        android:layout_marginBottom="32dp" />
+
+    <Button
+        android:id="@+id/btn_main_sniffer"
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:text="@string/main_btn_sniffer"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/btn_main_recon"
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:text="@string/main_btn_recon"
+        android:layout_marginBottom="12dp" />
+
+    <Button
+        android:id="@+id/btn_main_fission"
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:text="@string/main_btn_fission" />
+
+</LinearLayout>

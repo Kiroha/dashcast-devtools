@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DashCast DevTools</string>
+    <string name="main_subtitle">Sniffer · Recon · Fission test</string>
+    <string name="main_btn_sniffer">RE Sniffer</string>
+    <string name="main_btn_recon">DL5 Recon (cluster)</string>
+    <string name="main_btn_fission">Fission test (projection)</string>
+
+    <string name="sniffer_title">RE Sniffer</string>
+    <string name="sniffer_pill_active">● ACTIVE</string>
+    <string name="sniffer_pill_inactive">○ INACTIVE</string>
+    <string name="sniffer_idle">No capture in progress.</string>
+    <string name="sniffer_initializing">Initializing…</string>
+    <string name="sniffer_active_fmt">Capturing → %1$s</string>
+    <string name="sniffer_active_detail_fmt">Resumed: %1$s (%2$d KB)</string>
+    <string name="sniffer_previous_stopped_fmt">Previous capture stopped: %1$s (%2$d KB)</string>
+    <string name="sniffer_previous_no_adb_fmt">Previous capture detected: %1$s (%2$d KB) — ADB unavailable</string>
+    <string name="sniffer_stopped_fmt">Capture stopped: %1$s</string>
+    <string name="sniffer_init_fail_fmt">Init failed: %1$s</string>
+    <string name="sniffer_toast_started_fmt">Sniffer started → %1$s</string>
+    <string name="sniffer_toast_snapshot">Snapshot appended to file</string>
+    <string name="sniffer_no_file">No file to export</string>
+    <string name="sniffer_export_chooser">Export sniffer</string>
+    <string name="sniffer_export_failed_fmt">Export failed: %1$s</string>
+    <string name="sniffer_cleanup_done_fmt">%1$d old file(s) deleted</string>
+
+    <string name="sniffer_btn_start">Start</string>
+    <string name="sniffer_btn_stop">Stop</string>
+    <string name="sniffer_btn_snapshot">Snapshot</string>
+    <string name="sniffer_btn_export">Export</string>
+    <string name="sniffer_btn_cleanup">Cleanup</string>
+
+    <string name="recon_placeholder">DL5 Recon — TODO (transplant Dl5ClusterReconRunner from DashCast)</string>
+    <string name="fission_placeholder">Fission test — TODO (transplant Dl5VdTestRunner + MirrorDaemon from DashCast)</string>
+</resources>

@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DashCast DevTools</string>
+    <string name="main_subtitle">Sniffer · Recon · Test Fission</string>
+    <string name="main_btn_sniffer">Sniffeur RE</string>
+    <string name="main_btn_recon">Recon DL5 (cluster)</string>
+    <string name="main_btn_fission">Test Fission (projection)</string>
+
+    <!-- Sniffer -->
+    <string name="sniffer_title">Sniffeur RE</string>
+    <string name="sniffer_pill_active">● ACTIF</string>
+    <string name="sniffer_pill_inactive">○ INACTIF</string>
+    <string name="sniffer_idle">Aucune capture en cours.</string>
+    <string name="sniffer_initializing">Initialisation…</string>
+    <string name="sniffer_active_fmt">Capture en cours → %1$s</string>
+    <string name="sniffer_active_detail_fmt">Reprise : %1$s (%2$d KB)</string>
+    <string name="sniffer_previous_stopped_fmt">Capture précédente arrêtée : %1$s (%2$d KB)</string>
+    <string name="sniffer_previous_no_adb_fmt">Capture précédente détectée : %1$s (%2$d KB) — ADB inaccessible</string>
+    <string name="sniffer_stopped_fmt">Capture stoppée : %1$s</string>
+    <string name="sniffer_init_fail_fmt">Échec init : %1$s</string>
+    <string name="sniffer_toast_started_fmt">Sniffeur démarré → %1$s</string>
+    <string name="sniffer_toast_snapshot">Snapshot ajouté au fichier</string>
+    <string name="sniffer_no_file">Aucun fichier à exporter</string>
+    <string name="sniffer_export_chooser">Exporter le sniffer</string>
+    <string name="sniffer_export_failed_fmt">Export échoué : %1$s</string>
+    <string name="sniffer_cleanup_done_fmt">%1$d ancien(s) fichier(s) supprimé(s)</string>
+
+    <string name="sniffer_btn_start">Démarrer</string>
+    <string name="sniffer_btn_stop">Arrêter</string>
+    <string name="sniffer_btn_snapshot">Snapshot</string>
+    <string name="sniffer_btn_export">Exporter</string>
+    <string name="sniffer_btn_cleanup">Nettoyer</string>
+
+    <!-- Placeholders -->
+    <string name="recon_placeholder">Recon DL5 — à implémenter (transplant de Dl5ClusterReconRunner depuis DashCast)</string>
+    <string name="fission_placeholder">Test Fission — à implémenter (transplant de Dl5VdTestRunner + MirrorDaemon depuis DashCast)</string>
+</resources>

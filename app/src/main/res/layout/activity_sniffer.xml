@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:background="#121212">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/sniffer_title"
+        android:textSize="22sp"
+        android:textColor="#FFFFFF"
+        android:layout_marginBottom="8dp" />
+
+    <TextView
+        android:id="@+id/tv_sniffer_status_pill"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/sniffer_pill_inactive"
+        android:textSize="14sp"
+        android:textStyle="bold"
+        android:textColor="#FF8A80"
+        android:layout_marginBottom="12dp" />
+
+    <TextView
+        android:id="@+id/tv_sniffer_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/sniffer_idle"
+        android:textSize="13sp"
+        android:textColor="#DDDDDD"
+        android:layout_marginBottom="20dp"
+        android:minLines="2" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/btn_sniffer_start"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/sniffer_btn_start"
+            android:layout_marginEnd="6dp" />
+
+        <Button
+            android:id="@+id/btn_sniffer_stop"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/sniffer_btn_stop"
+            android:enabled="false"
+            android:layout_marginEnd="6dp" />
+
+        <Button
+            android:id="@+id/btn_sniffer_snapshot"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/sniffer_btn_snapshot"
+            android:enabled="false" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="12dp">
+
+        <Button
+            android:id="@+id/btn_sniffer_export"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/sniffer_btn_export"
+            android:enabled="false"
+            android:layout_marginEnd="6dp" />
+
+        <Button
+            android:id="@+id/btn_sniffer_cleanup"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/sniffer_btn_cleanup" />
+    </LinearLayout>
+</LinearLayout>
