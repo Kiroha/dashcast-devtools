@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DashCast DevTools</string>
-    <string name="main_subtitle">Sniffer · Recon · Test Fission</string>
+    <string name="main_subtitle">Sniffer · DiLink 2 · DiLink 3 · DiLink 4 · DiLink 5</string>
     <string name="main_btn_sniffer">Sniffeur RE</string>
     <string name="main_btn_recon">Recon DL5 (cluster)</string>
     <string name="main_btn_fission">Test Fission (projection)</string>
@@ -37,15 +37,88 @@
 
     <!-- Nav rail / hub -->
     <string name="nav_sniffer">Sniffer</string>
-    <string name="nav_recon">Recon</string>
-    <string name="nav_fission">Fission</string>
+    <string name="nav_dl2">DiLink 2</string>
+    <string name="nav_dl3">DiLink 3</string>
+    <string name="nav_dl4">DiLink 4</string>
+    <string name="nav_dl50">DiLink 5.0</string>
+    <string name="nav_dl51">DiLink 5.1</string>
     <string name="nav_back">Retour</string>
     <string name="menu_overflow">Plus d\'options</string>
     <string name="menu_about">À propos</string>
-    <string name="about_text_fmt">DashCast DevTools v%1$s (build %2$d)\n\nOutils RE pour la stack BYD :\n• Sniffer (logcat + dumpsys continu)\n• Recon DL5 (à venir)\n• Test Fission (à venir)\n\nhttps://github.com/Kiroha/dashcast-devtools</string>
+    <string name="about_text_fmt">DashCast DevTools v%1$s (build %2$d)\n\nOutils RE pour la stack BYD :\n• Sniffer (logcat + dumpsys continu)\n• DiLink 2 (à venir)\n• DiLink 3 (à venir)\n• DiLink 4 (à venir)\n• DiLink 5.0 (à venir)\n• DiLink 5.1 (à venir)\n\nhttps://github.com/Kiroha/dashcast-devtools</string>
     <string name="hub_sniffer_desc">Capture continue logcat + dumpsys, snapshots manuels, export.</string>
-    <string name="hub_recon_desc">Batterie de tests cluster DL5 (à venir — transplant depuis DashCast).</string>
-    <string name="hub_fission_desc">Validation pipeline VirtualDisplay → MirrorDaemon (à venir).</string>
+    <string name="hub_dl2_desc">Outils RE pour la plateforme DiLink 2 (Android 8) — à venir.</string>
+    <string name="hub_dl3_desc">Outils RE pour la plateforme DiLink 3 (Android 9) — à venir.</string>
+    <string name="hub_dl4_desc">Outils RE pour la plateforme DiLink 4 — à venir.</string>
+    <string name="hub_dl50_desc">Outils RE pour la plateforme DiLink 5.0 (Android 12) — à venir.</string>
+    <string name="hub_dl51_desc">Outils RE pour la plateforme DiLink 5.1 — à venir.</string>
+
+    <!-- DiLink version names (translatable=false : noms propres) -->
+    <string name="dilink2_name" translatable="false">DiLink 2</string>
+    <string name="dilink3_name" translatable="false">DiLink 3</string>
+    <string name="dilink4_name" translatable="false">DiLink 4</string>
+    <string name="dilink50_name" translatable="false">DiLink 5.0</string>
+    <string name="dilink51_name" translatable="false">DiLink 5.1</string>
+
+    <!-- DiLink placeholders -->
+    <string name="dl2_placeholder">DiLink 2 — à implémenter.</string>
+    <string name="dl3_placeholder">DiLink 3 — à implémenter.</string>
+    <string name="dl4_placeholder">DiLink 4 — à implémenter.</string>
+    <string name="dl50_placeholder">DiLink 5.0 — à implémenter (transplant Dl5ClusterReconRunner + Dl5VdTestRunner depuis DashCast).</string>
+    <string name="dl51_placeholder">DiLink 5.1 — à implémenter.</string>
+
+    <!-- ─── Diagnostic commun ─────────────────────────────────────────────── -->
+    <!-- Sous-titre header : "{produit} · API {n}" -->
+    <string name="diag_platform_subtitle_fmt" translatable="false">%1$s · API %2$d</string>
+    <!-- Compteurs état idle (avant premier run) -->
+    <string name="diag_counters_idle">—</string>
+    <!-- Compteurs pendant le run -->
+    <string name="diag_counters_running">En cours…</string>
+    <!-- Compteurs résultat (PASS / FAIL / SKIP) -->
+    <string name="diag_counters_fmt">%1$d ✓  %2$d ✗  %3$d ⊘</string>
+    <!-- Compteurs résultat avec WARN (PASS / FAIL / WARN / SKIP) -->
+    <string name="diag_counters_warn_fmt">%1$d ✓  %2$d ✗  %3$d !  %4$d ⊘</string>
+    <!-- Bouton lancer tous les tests -->
+    <string name="diag_run_all">Lancer</string>
+    <!-- Bouton copier / partager le rapport -->
+    <string name="diag_copy_report">Rapport</string>
+    <!-- Bouton envoyer vers Telegram -->
+    <string name="diag_send_telegram">Telegram</string>
+    <!-- Toast aucun résultat à exporter -->
+    <string name="diag_toast_no_results">Lancez d\'abord les tests.</string>
+
+    <!-- ─── DiLink 2 ───────────────────────────────────────────────────────── -->
+    <string name="diag_dl2_pill_detected">DiLink 2 détecté</string>
+    <string name="diag_dl2_pill_unknown">Plateforme inconnue</string>
+
+    <!-- ─── DiLink 4 ───────────────────────────────────────────────────────── -->
+    <string name="diag_dl4_pill_detected">DiLink 4 détecté</string>
+    <string name="diag_dl4_pill_unknown">Plateforme inconnue</string>
+    <!-- Avertissement tier-D (tests potentiellement destructifs) -->
+    <string name="diag_dl4_warning_d_tier">⚠ Les tests D-tier envoient des commandes AutoContainer. Ne pas lancer sur un véhicule en circulation.</string>
+
+    <!-- ─── DiLink 5.0 ────────────────────────────────────────────────────── -->
+    <string name="diag_dl50_pill_detected">DiLink 5 détecté</string>
+    <string name="diag_dl50_pill_unknown">Plateforme inconnue</string>
+    <!-- Labels des onglets DL5.0 -->
+    <string name="diag_tab_recon">Recon</string>
+    <string name="diag_tab_fission">Fission</string>
+    <!-- Titres sections -->
+    <string name="diag_dl50_recon_title">Recon cluster DL5</string>
+    <string name="diag_dl50_fission_title">Test Fission (VD pipeline)</string>
+    <!-- Avertissement fission -->
+    <string name="diag_dl50_fission_warning">⚠ Ce test crée un VirtualDisplay et interagit avec le display cluster. DL5 uniquement.</string>
+    <!-- Bouton run fission -->
+    <string name="diag_dl50_fission_run">Lancer Fission…</string>
+    <!-- Picker app cible fission -->
+    <string name="diag_dl50_fission_pick_title">Choisir l\'application cible</string>
+    <string name="diag_dl50_fission_pick_empty">Aucune application lanceable trouvée.</string>
+    <!-- Prompts interactifs V06 -->
+    <string name="diag_prompt_yes">Oui</string>
+    <string name="diag_prompt_no">Non</string>
+    <!-- Prompt interactif V06 Fission (confirmé par l\'utilisateur pendant le test) -->
+    <string name="diag_dl5_fission_prompt_title">Vérification cluster</string>
+    <string name="diag_dl5_fission_prompt_msg_fmt">%1$s est-il visible sur l\'écran cluster ?\n\n(test sur le display %2$d)</string>
 
     <!-- OTA -->
     <string name="menu_check_updates">🔄 Rechercher des mises à jour</string>

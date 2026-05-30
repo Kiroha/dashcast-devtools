@@ -1,0 +1,320 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  activity_dilink50.xml — DiLink 5.0 diagnostic activity.
+  Deux tabs : "Recon" (Dl5ClusterReconRunner) et "Fission" (Dl5VdTestRunner).
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/windowBackground">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:title="@string/dilink50_name"
+        app:navigationIcon="?attr/homeAsUpIndicator"
+        style="@style/Widget.MaterialComponents.Toolbar.Primary"/>
+
+    <!-- TabLayout Recon / Fission -->
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/tabs_dl50"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:tabMode="fixed"
+        app:tabGravity="fill"
+        app:tabSelectedTextColor="@color/md_primary"
+        app:tabTextColor="@color/md_on_surface_variant"
+        app:tabIndicatorColor="@color/md_primary"/>
+
+    <!-- Panneaux (visibility swap) -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- ─── Panneau Recon ─────────────────────────────────────────── -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/panel_recon"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="visible">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Header recon -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/md_outline_variant"
+                    app:cardBackgroundColor="@color/md_surface_container_low"
+                    app:contentPadding="20dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:src="@android:drawable/ic_dialog_info"
+                                android:tint="@color/md_primary"
+                                android:layout_marginEnd="12dp"/>
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/diag_dl50_recon_title"
+                                    android:textSize="18sp"
+                                    android:textStyle="bold"
+                                    android:textColor="?android:attr/textColorPrimary"/>
+                                <TextView
+                                    android:id="@+id/tv_recon_subtitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="12sp"
+                                    android:textColor="@color/md_on_surface_variant"
+                                    android:text="…"/>
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="12dp">
+                            <TextView
+                                android:id="@+id/tv_recon_pill"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingStart="12dp"
+                                android:paddingEnd="12dp"
+                                android:paddingTop="4dp"
+                                android:paddingBottom="4dp"
+                                android:background="@drawable/bg_test_pill"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:text="—"/>
+                            <TextView
+                                android:id="@+id/tv_recon_counters"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:textSize="12sp"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:text="@string/diag_counters_idle"/>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_recon_run_all"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/diag_run_all"/>
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_recon_copy_report"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/diag_copy_report"/>
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_recon_send_telegram"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/diag_send_telegram"/>
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <LinearLayout
+                    android:id="@+id/ll_recon_test_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"/>
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+        <!-- ─── Panneau Fission ───────────────────────────────────────── -->
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/panel_fission"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <!-- Header fission -->
+                <com.google.android.material.card.MaterialCardView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="16dp"
+                    app:cardCornerRadius="20dp"
+                    app:cardElevation="0dp"
+                    app:strokeWidth="1dp"
+                    app:strokeColor="@color/md_outline_variant"
+                    app:cardBackgroundColor="@color/md_surface_container_low"
+                    app:contentPadding="20dp">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="8dp">
+                            <ImageView
+                                android:layout_width="32dp"
+                                android:layout_height="32dp"
+                                android:src="@android:drawable/ic_dialog_info"
+                                android:tint="@color/md_tertiary"
+                                android:layout_marginEnd="12dp"/>
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:orientation="vertical">
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/diag_dl50_fission_title"
+                                    android:textSize="18sp"
+                                    android:textStyle="bold"
+                                    android:textColor="?android:attr/textColorPrimary"/>
+                                <TextView
+                                    android:id="@+id/tv_fission_subtitle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:textSize="12sp"
+                                    android:textColor="@color/md_on_surface_variant"
+                                    android:text="…"/>
+                            </LinearLayout>
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:gravity="center_vertical"
+                            android:layout_marginBottom="12dp">
+                            <TextView
+                                android:id="@+id/tv_fission_pill"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:paddingStart="12dp"
+                                android:paddingEnd="12dp"
+                                android:paddingTop="4dp"
+                                android:paddingBottom="4dp"
+                                android:background="@drawable/bg_test_pill"
+                                android:textSize="12sp"
+                                android:textStyle="bold"
+                                android:text="—"/>
+                            <TextView
+                                android:id="@+id/tv_fission_counters"
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="12dp"
+                                android:textSize="12sp"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:text="@string/diag_counters_idle"/>
+                        </LinearLayout>
+
+                        <!-- Avertissement fission -->
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/diag_dl50_fission_warning"
+                            android:textSize="11sp"
+                            android:textColor="@color/md_on_surface_variant"
+                            android:layout_marginBottom="12dp"/>
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_fission_run"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:backgroundTint="@color/md_tertiary"
+                                android:textColor="@color/md_on_tertiary"
+                                android:text="@string/diag_dl50_fission_run"/>
+                            <com.google.android.material.button.MaterialButton
+                                android:id="@+id/btn_fission_copy_report"
+                                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginStart="8dp"
+                                android:text="@string/diag_copy_report"/>
+                        </LinearLayout>
+
+                    </LinearLayout>
+                </com.google.android.material.card.MaterialCardView>
+
+                <!-- SurfaceView inline pour V05 (mirror output — visible pendant le test) -->
+                <FrameLayout
+                    android:id="@+id/fl_fission_surface_wrapper"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="8dp"
+                    android:visibility="gone">
+                    <SurfaceView
+                        android:id="@+id/sv_fission_cluster"
+                        android:layout_width="match_parent"
+                        android:layout_height="240dp"/>
+                </FrameLayout>
+
+                <LinearLayout
+                    android:id="@+id/ll_fission_test_list"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"/>
+
+            </LinearLayout>
+        </androidx.core.widget.NestedScrollView>
+
+    </FrameLayout>
+
+</LinearLayout>

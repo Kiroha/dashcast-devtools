@@ -47,6 +47,31 @@
             android:exported="false"
             android:screenOrientation="landscape" />
 
+        <activity
+            android:name=".dilink.DiLink2Activity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".dilink.DiLink3Activity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".dilink.DiLink4Activity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".dilink.DiLink50Activity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
+            android:name=".dilink.DiLink51Activity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.dashcast.devtools.fileprovider"

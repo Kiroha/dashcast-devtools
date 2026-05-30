@@ -36,95 +36,189 @@
             android:focusable="true"
             android:contentDescription="@string/app_name"/>
 
-        <LinearLayout
-            android:id="@+id/nav_sniffer"
+        <ScrollView
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:paddingTop="6dp"
-            android:paddingBottom="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?android:attr/selectableItemBackground">
-            <ImageView
-                android:layout_width="56dp"
-                android:layout_height="32dp"
-                android:padding="4dp"
-                android:scaleType="fitCenter"
-                android:tint="@color/md_on_secondary_container"
-                android:background="@drawable/bg_nav_pill_active"
-                android:src="@drawable/ic_sniffer"
-                android:contentDescription="@string/main_btn_sniffer"/>
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/nav_sniffer"
-                android:textSize="11sp"
-                android:textColor="@color/md_on_surface"/>
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/nav_recon"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:paddingTop="10dp"
-            android:paddingBottom="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?android:attr/selectableItemBackground">
-            <ImageView
-                android:layout_width="56dp"
-                android:layout_height="32dp"
-                android:padding="4dp"
-                android:scaleType="fitCenter"
-                android:tint="@color/md_on_surface_variant"
-                android:src="@drawable/ic_recon"
-                android:contentDescription="@string/main_btn_recon"/>
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/nav_recon"
-                android:textSize="11sp"
-                android:textColor="@color/md_on_surface_variant"/>
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/nav_fission"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:paddingTop="10dp"
-            android:paddingBottom="6dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:background="?android:attr/selectableItemBackground">
-            <ImageView
-                android:layout_width="56dp"
-                android:layout_height="32dp"
-                android:padding="4dp"
-                android:scaleType="fitCenter"
-                android:tint="@color/md_on_surface_variant"
-                android:src="@drawable/ic_fission"
-                android:contentDescription="@string/main_btn_fission"/>
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:text="@string/nav_fission"
-                android:textSize="11sp"
-                android:textColor="@color/md_on_surface_variant"/>
-        </LinearLayout>
-
-        <View
-            android:layout_width="0dp"
             android:layout_height="0dp"
-            android:layout_weight="1"/>
+            android:layout_weight="1"
+            android:scrollbars="none"
+            android:overScrollMode="never">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:id="@+id/nav_sniffer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?android:attr/selectableItemBackground">
+                    <ImageView
+                        android:layout_width="56dp"
+                        android:layout_height="32dp"
+                        android:padding="4dp"
+                        android:scaleType="fitCenter"
+                        android:tint="@color/md_on_secondary_container"
+                        android:background="@drawable/bg_nav_pill_active"
+                        android:src="@drawable/ic_sniffer"
+                        android:contentDescription="@string/main_btn_sniffer"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_sniffer"
+                        android:textSize="11sp"
+                        android:textColor="@color/md_on_surface"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/nav_dl2"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?android:attr/selectableItemBackground">
+                    <ImageView
+                        android:layout_width="56dp"
+                        android:layout_height="32dp"
+                        android:padding="4dp"
+                        android:scaleType="fitCenter"
+                        android:tint="@color/md_on_surface_variant"
+                        android:src="@drawable/ic_recon"
+                        android:contentDescription="@string/dilink2_name"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_dl2"
+                        android:textSize="11sp"
+                        android:textColor="@color/md_on_surface_variant"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/nav_dl3"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?android:attr/selectableItemBackground">
+                    <ImageView
+                        android:layout_width="56dp"
+                        android:layout_height="32dp"
+                        android:padding="4dp"
+                        android:scaleType="fitCenter"
+                        android:tint="@color/md_on_surface_variant"
+                        android:src="@drawable/ic_recon"
+                        android:contentDescription="@string/dilink3_name"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_dl3"
+                        android:textSize="11sp"
+                        android:textColor="@color/md_on_surface_variant"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/nav_dl4"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?android:attr/selectableItemBackground">
+                    <ImageView
+                        android:layout_width="56dp"
+                        android:layout_height="32dp"
+                        android:padding="4dp"
+                        android:scaleType="fitCenter"
+                        android:tint="@color/md_on_surface_variant"
+                        android:src="@drawable/ic_recon"
+                        android:contentDescription="@string/dilink4_name"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_dl4"
+                        android:textSize="11sp"
+                        android:textColor="@color/md_on_surface_variant"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/nav_dl50"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?android:attr/selectableItemBackground">
+                    <ImageView
+                        android:layout_width="56dp"
+                        android:layout_height="32dp"
+                        android:padding="4dp"
+                        android:scaleType="fitCenter"
+                        android:tint="@color/md_on_surface_variant"
+                        android:src="@drawable/ic_fission"
+                        android:contentDescription="@string/dilink50_name"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_dl50"
+                        android:textSize="11sp"
+                        android:textColor="@color/md_on_surface_variant"/>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/nav_dl51"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center_horizontal"
+                    android:paddingTop="6dp"
+                    android:paddingBottom="6dp"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:background="?android:attr/selectableItemBackground">
+                    <ImageView
+                        android:layout_width="56dp"
+                        android:layout_height="32dp"
+                        android:padding="4dp"
+                        android:scaleType="fitCenter"
+                        android:tint="@color/md_on_surface_variant"
+                        android:src="@drawable/ic_fission"
+                        android:contentDescription="@string/dilink51_name"/>
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="@string/nav_dl51"
+                        android:textSize="11sp"
+                        android:textColor="@color/md_on_surface_variant"/>
+                </LinearLayout>
+
+            </LinearLayout>
+        </ScrollView>
 
         <ImageView
             android:id="@+id/nav_overflow"
@@ -219,7 +313,7 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/card_recon"
+                android:id="@+id/card_dl2"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="12dp"
@@ -242,7 +336,7 @@
                         android:background="@drawable/bg_nav_pill_active"
                         android:src="@drawable/ic_recon"
                         android:tint="@color/md_on_secondary_container"
-                        android:contentDescription="@string/main_btn_recon"/>
+                        android:contentDescription="@string/dilink2_name"/>
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -252,14 +346,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/main_btn_recon"
+                            android:text="@string/dilink2_name"
                             android:textSize="16sp"
                             android:textStyle="bold"
                             android:textColor="@color/md_on_surface"/>
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="@string/hub_recon_desc"
+                            android:text="@string/hub_dl2_desc"
                             android:textSize="12sp"
                             android:textColor="@color/md_on_surface_variant"/>
                     </LinearLayout>
@@ -267,7 +361,151 @@
             </com.google.android.material.card.MaterialCardView>
 
             <com.google.android.material.card.MaterialCardView
-                android:id="@+id/card_fission"
+                android:id="@+id/card_dl3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="@color/md_surface_container"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp"
+                    android:gravity="center_vertical">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:padding="8dp"
+                        android:background="@drawable/bg_nav_pill_active"
+                        android:src="@drawable/ic_recon"
+                        android:tint="@color/md_on_secondary_container"
+                        android:contentDescription="@string/dilink3_name"/>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/dilink3_name"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/md_on_surface"/>
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/hub_dl3_desc"
+                            android:textSize="12sp"
+                            android:textColor="@color/md_on_surface_variant"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_dl4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="@color/md_surface_container"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp"
+                    android:gravity="center_vertical">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:padding="8dp"
+                        android:background="@drawable/bg_nav_pill_active"
+                        android:src="@drawable/ic_recon"
+                        android:tint="@color/md_on_secondary_container"
+                        android:contentDescription="@string/dilink4_name"/>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/dilink4_name"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/md_on_surface"/>
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/hub_dl4_desc"
+                            android:textSize="12sp"
+                            android:textColor="@color/md_on_surface_variant"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_dl50"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                app:cardBackgroundColor="@color/md_surface_container"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="0dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:foreground="?android:attr/selectableItemBackground">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:padding="16dp"
+                    android:gravity="center_vertical">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:padding="8dp"
+                        android:background="@drawable/bg_nav_pill_active"
+                        android:src="@drawable/ic_fission"
+                        android:tint="@color/md_on_secondary_container"
+                        android:contentDescription="@string/dilink50_name"/>
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="12dp"
+                        android:orientation="vertical">
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/dilink50_name"
+                            android:textSize="16sp"
+                            android:textStyle="bold"
+                            android:textColor="@color/md_on_surface"/>
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/hub_dl50_desc"
+                            android:textSize="12sp"
+                            android:textColor="@color/md_on_surface_variant"/>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
+                android:id="@+id/card_dl51"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="24dp"
@@ -290,7 +528,7 @@
                         android:background="@drawable/bg_nav_pill_active"
                         android:src="@drawable/ic_fission"
                         android:tint="@color/md_on_secondary_container"
-                        android:contentDescription="@string/main_btn_fission"/>
+                        android:contentDescription="@string/dilink51_name"/>
                     <LinearLayout
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
@@ -300,14 +538,14 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="@string/main_btn_fission"
+                            android:text="@string/dilink51_name"
                             android:textSize="16sp"
                             android:textStyle="bold"
                             android:textColor="@color/md_on_surface"/>
                         <TextView
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:text="@string/hub_fission_desc"
+                            android:text="@string/hub_dl51_desc"
                             android:textSize="12sp"
                             android:textColor="@color/md_on_surface_variant"/>
                     </LinearLayout>

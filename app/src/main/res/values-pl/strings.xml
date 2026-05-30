@@ -33,7 +33,6 @@
     <string name="recon_placeholder">DL5 Recon — TODO (transplant Dl5ClusterReconRunner from DashCast)</string>
     <string name="fission_placeholder">Fission test — TODO (transplant Dl5VdTestRunner + MirrorDaemon from DashCast)</string>
 
-
     <!-- Nav rail / hub -->
     <string name="nav_sniffer">Sniffer</string>
     <string name="nav_dl2">DiLink 2</string>
@@ -58,6 +57,7 @@
     <string name="dilink4_name" translatable="false">DiLink 4</string>
     <string name="dilink50_name" translatable="false">DiLink 5.0</string>
     <string name="dilink51_name" translatable="false">DiLink 5.1</string>
+
     <!-- OTA -->
     <string name="menu_check_updates">🔄 Check for updates</string>
     <string name="ota_dialog_title">Update available</string>
@@ -73,11 +73,11 @@
     <string name="ota_progress_percent" translatable="false">%1$d %%</string>
 
     <!-- DiLink placeholders -->
-    <string name="dl2_placeholder">DiLink 2 — not yet implemented.</string>
-    <string name="dl3_placeholder">DiLink 3 — not yet implemented.</string>
-    <string name="dl4_placeholder">DiLink 4 — not yet implemented.</string>
-    <string name="dl50_placeholder">DiLink 5.0 — not yet implemented.</string>
-    <string name="dl51_placeholder">DiLink 5.1 — not yet implemented.</string>
+    <string name="dl2_placeholder">DiLink 2 — jeszcze nie zaimplementowano.</string>
+    <string name="dl3_placeholder">DiLink 3 — jeszcze nie zaimplementowano.</string>
+    <string name="dl4_placeholder">DiLink 4 — jeszcze nie zaimplementowano.</string>
+    <string name="dl50_placeholder">DiLink 5.0 — jeszcze nie zaimplementowano.</string>
+    <string name="dl51_placeholder">DiLink 5.1 — jeszcze nie zaimplementowano.</string>
 
     <!-- Diagnostic common -->
     <string name="diag_platform_subtitle_fmt" translatable="false">%1$s · API %2$d</string>
@@ -85,8 +85,8 @@
     <string name="diag_counters_running">Running…</string>
     <string name="diag_counters_fmt">%1$d ✓  %2$d ✗  %3$d ⊘</string>
     <string name="diag_counters_warn_fmt">%1$d ✓  %2$d ✗  %3$d !  %4$d ⊘</string>
-    <string name="diag_run_all">Çalıştır</string>
-    <string name="diag_copy_report">Rapor</string>
+    <string name="diag_run_all">Uruchom</string>
+    <string name="diag_copy_report">Raport</string>
     <string name="diag_send_telegram">Telegram</string>
     <string name="diag_toast_no_results">Run the tests first.</string>
     <string name="diag_dl2_pill_detected">DiLink 2</string>
@@ -98,14 +98,14 @@
     <string name="diag_dl50_pill_unknown">?</string>
     <string name="diag_tab_recon">Recon</string>
     <string name="diag_tab_fission">Fission</string>
-    <string name="diag_dl50_recon_title">DL5 küme keşfi</string>
-    <string name="diag_dl50_fission_title">Fisyon testi (VD pipeline)</string>
+    <string name="diag_dl50_recon_title">Rozpoznanie klastra DL5</string>
+    <string name="diag_dl50_fission_title">Test Fission (VD pipeline)</string>
     <string name="diag_dl50_fission_warning">⚠ VirtualDisplay test — DL5 only.</string>
-    <string name="diag_dl50_fission_run">Fisyon\'u çalıştır…</string>
-    <string name="diag_dl50_fission_pick_title">Hedef uygulamayı seçin</string>
-    <string name="diag_dl50_fission_pick_empty">Başlatılabilir uygulama bulunamadı.</string>
-    <string name="diag_prompt_yes">Evet</string>
-    <string name="diag_prompt_no">Hayır</string>
+    <string name="diag_dl50_fission_run">Uruchom Fission…</string>
+    <string name="diag_dl50_fission_pick_title">Wybierz docelową aplikację</string>
+    <string name="diag_dl50_fission_pick_empty">Nie znaleziono żadnej uruchamialnej aplikacji.</string>
+    <string name="diag_prompt_yes">Tak</string>
+    <string name="diag_prompt_no">Nie</string>
     <string name="diag_dl5_fission_prompt_title">Cluster check</string>
     <string name="diag_dl5_fission_prompt_msg_fmt">Is %1$s visible on the cluster display?\n\n(test on display %2$d)</string>
 </resources>

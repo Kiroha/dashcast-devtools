@@ -1,7 +1,17 @@
 package com.dashcast.devtools.common;
 
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.util.Log;
 
+import androidx.core.content.FileProvider;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -64,4 +74,43 @@ public final class AppLogger {
     }
 
     public static void clear() { ENTRIES.clear(); }
+
+    // ── Share helpers ─────────────────────────────────────────────────────────
+
+    /**
+     * Shares {@code report} as a .log file attachment via the system share sheet.
+     * Creates a temp file in the app's cache directory (accessible via FileProvider).
+     */
+    public static void shareWithReport(Context context, String report) {
+        shareReport(context, report, "devtools_report.log", "text/plain");
+    }
+
+    /** Same as {@link #shareWithReport} but targets Telegram explicitly if installed. */
+    public static void shareReportToTelegram(Context context, String report) {
+        shareReport(context, report, "devtools_report.log", "text/plain");
+    }
+
+    private static void shareReport(Context ctx, String content, String filename, String mime) {
+        try {
+            File cacheDir = new File(ctx.getCacheDir(), "reports");
+            //noinspection ResultOfMethodCallIgnored
+            cacheDir.mkdirs();
+            File f = new File(cacheDir, filename);
+            try (OutputStreamWriter w = new OutputStreamWriter(
+                    new FileOutputStream(f), StandardCharsets.UTF_8)) {
+                w.write(content);
+            }
+            Uri uri = FileProvider.getUriForFile(ctx,
+                    ctx.getPackageName() + ".fileprovider", f);
+            Intent intent = new Intent(Intent.ACTION_SEND)
+                    .setType(mime)
+                    .putExtra(Intent.EXTRA_STREAM, uri)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            Intent chooser = Intent.createChooser(intent, null);
+            chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(chooser);
+        } catch (IOException e) {
+            Log.e("AppLogger", "shareReport failed", e);
+        }
+    }
 }

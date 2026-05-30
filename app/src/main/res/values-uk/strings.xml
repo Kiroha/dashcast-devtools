@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">DashCast DevTools</string>
-    <string name="main_subtitle">Sniffer · Recon · Fission test</string>
+    <string name="main_subtitle">Sniffer · DiLink 2 · DiLink 3 · DiLink 4 · DiLink 5</string>
     <string name="main_btn_sniffer">RE Sniffer</string>
     <string name="main_btn_recon">DL5 Recon (cluster)</string>
     <string name="main_btn_fission">Fission test (projection)</string>
@@ -36,15 +36,28 @@
 
     <!-- Nav rail / hub -->
     <string name="nav_sniffer">Sniffer</string>
-    <string name="nav_recon">Recon</string>
-    <string name="nav_fission">Fission</string>
+    <string name="nav_dl2">DiLink 2</string>
+    <string name="nav_dl3">DiLink 3</string>
+    <string name="nav_dl4">DiLink 4</string>
+    <string name="nav_dl50">DiLink 5.0</string>
+    <string name="nav_dl51">DiLink 5.1</string>
     <string name="nav_back">Back</string>
     <string name="menu_overflow">More options</string>
     <string name="menu_about">About</string>
-    <string name="about_text_fmt">DashCast DevTools v%1$s (build %2$d)\n\nRE tools for the BYD stack:\n• Sniffer (continuous logcat + dumpsys)\n• DL5 Recon (coming soon)\n• Fission test (coming soon)\n\nhttps://github.com/Kiroha/dashcast-devtools</string>
+    <string name="about_text_fmt">DashCast DevTools v%1$s (build %2$d)\n\nRE tools for the BYD stack:\n• Sniffer (continuous logcat + dumpsys)\n• DiLink 2 (coming soon)\n• DiLink 3 (coming soon)\n• DiLink 4 (coming soon)\n• DiLink 5.0 (coming soon)\n• DiLink 5.1 (coming soon)\n\nhttps://github.com/Kiroha/dashcast-devtools</string>
     <string name="hub_sniffer_desc">Continuous logcat + dumpsys capture, manual snapshots, export.</string>
-    <string name="hub_recon_desc">DL5 cluster test battery (coming soon — transplant from DashCast).</string>
-    <string name="hub_fission_desc">VirtualDisplay → MirrorDaemon pipeline validation (coming soon).</string>
+    <string name="hub_dl2_desc">RE tools for the DiLink 2 platform (Android 8) — coming soon.</string>
+    <string name="hub_dl3_desc">RE tools for the DiLink 3 platform (Android 9) — coming soon.</string>
+    <string name="hub_dl4_desc">RE tools for the DiLink 4 platform — coming soon.</string>
+    <string name="hub_dl50_desc">RE tools for the DiLink 5.0 platform (Android 12) — coming soon.</string>
+    <string name="hub_dl51_desc">RE tools for the DiLink 5.1 platform — coming soon.</string>
+
+    <!-- DiLink version names (translatable=false : proper nouns) -->
+    <string name="dilink2_name" translatable="false">DiLink 2</string>
+    <string name="dilink3_name" translatable="false">DiLink 3</string>
+    <string name="dilink4_name" translatable="false">DiLink 4</string>
+    <string name="dilink50_name" translatable="false">DiLink 5.0</string>
+    <string name="dilink51_name" translatable="false">DiLink 5.1</string>
     <!-- OTA -->
     <string name="menu_check_updates">🔄 Check for updates</string>
     <string name="ota_dialog_title">Update available</string>
@@ -58,4 +71,41 @@
     <string name="ota_version_label" translatable="false">DashCast DevTools %1$s</string>
     <string name="ota_progress_unknown" translatable="false">…</string>
     <string name="ota_progress_percent" translatable="false">%1$d %%</string>
+
+    <!-- DiLink placeholders -->
+    <string name="dl2_placeholder">DiLink 2 — ще не реалізовано.</string>
+    <string name="dl3_placeholder">DiLink 3 — ще не реалізовано.</string>
+    <string name="dl4_placeholder">DiLink 4 — ще не реалізовано.</string>
+    <string name="dl50_placeholder">DiLink 5.0 — ще не реалізовано.</string>
+    <string name="dl51_placeholder">DiLink 5.1 — ще не реалізовано.</string>
+
+    <!-- Diagnostic common -->
+    <string name="diag_platform_subtitle_fmt" translatable="false">%1$s · API %2$d</string>
+    <string name="diag_counters_idle">—</string>
+    <string name="diag_counters_running">Running…</string>
+    <string name="diag_counters_fmt">%1$d ✓  %2$d ✗  %3$d ⊘</string>
+    <string name="diag_counters_warn_fmt">%1$d ✓  %2$d ✗  %3$d !  %4$d ⊘</string>
+    <string name="diag_run_all">Запуск</string>
+    <string name="diag_copy_report">Звіт</string>
+    <string name="diag_send_telegram">Telegram</string>
+    <string name="diag_toast_no_results">Run the tests first.</string>
+    <string name="diag_dl2_pill_detected">DiLink 2</string>
+    <string name="diag_dl2_pill_unknown">?</string>
+    <string name="diag_dl4_pill_detected">DiLink 4</string>
+    <string name="diag_dl4_pill_unknown">?</string>
+    <string name="diag_dl4_warning_d_tier">⚠ D-tier tests send AutoContainer commands. Do not run while the vehicle is in motion.</string>
+    <string name="diag_dl50_pill_detected">DiLink 5</string>
+    <string name="diag_dl50_pill_unknown">?</string>
+    <string name="diag_tab_recon">Recon</string>
+    <string name="diag_tab_fission">Fission</string>
+    <string name="diag_dl50_recon_title">Розвідка кластера DL5</string>
+    <string name="diag_dl50_fission_title">Тест Fission (VD pipeline)</string>
+    <string name="diag_dl50_fission_warning">⚠ VirtualDisplay test — DL5 only.</string>
+    <string name="diag_dl50_fission_run">Запустити Fission…</string>
+    <string name="diag_dl50_fission_pick_title">Обрати цільовий застосунок</string>
+    <string name="diag_dl50_fission_pick_empty">Запускних застосунків не знайдено.</string>
+    <string name="diag_prompt_yes">Так</string>
+    <string name="diag_prompt_no">Ні</string>
+    <string name="diag_dl5_fission_prompt_title">Cluster check</string>
+    <string name="diag_dl5_fission_prompt_msg_fmt">Is %1$s visible on the cluster display?\n\n(test on display %2$d)</string>
 </resources>

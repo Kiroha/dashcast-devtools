@@ -9,8 +9,11 @@ import android.widget.PopupMenu;
 import android.widget.TextView;
 
 import com.dashcast.devtools.common.OtaUi;
-import com.dashcast.devtools.fission.FissionActivity;
-import com.dashcast.devtools.recon.ReconActivity;
+import com.dashcast.devtools.dilink.DiLink2Activity;
+import com.dashcast.devtools.dilink.DiLink3Activity;
+import com.dashcast.devtools.dilink.DiLink4Activity;
+import com.dashcast.devtools.dilink.DiLink50Activity;
+import com.dashcast.devtools.dilink.DiLink51Activity;
 import com.dashcast.devtools.sniffer.SnifferActivity;
 
 /**
@@ -27,18 +30,30 @@ public class MainActivity extends Activity {
         // Nav rail entries
         findViewById(R.id.nav_sniffer).setOnClickListener(v ->
                 startActivity(new Intent(this, SnifferActivity.class)));
-        findViewById(R.id.nav_recon).setOnClickListener(v ->
-                startActivity(new Intent(this, ReconActivity.class)));
-        findViewById(R.id.nav_fission).setOnClickListener(v ->
-                startActivity(new Intent(this, FissionActivity.class)));
+        findViewById(R.id.nav_dl2).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink2Activity.class)));
+        findViewById(R.id.nav_dl3).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink3Activity.class)));
+        findViewById(R.id.nav_dl4).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink4Activity.class)));
+        findViewById(R.id.nav_dl50).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink50Activity.class)));
+        findViewById(R.id.nav_dl51).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink51Activity.class)));
 
         // Module cards (same destinations, larger touch target)
         findViewById(R.id.card_sniffer).setOnClickListener(v ->
                 startActivity(new Intent(this, SnifferActivity.class)));
-        findViewById(R.id.card_recon).setOnClickListener(v ->
-                startActivity(new Intent(this, ReconActivity.class)));
-        findViewById(R.id.card_fission).setOnClickListener(v ->
-                startActivity(new Intent(this, FissionActivity.class)));
+        findViewById(R.id.card_dl2).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink2Activity.class)));
+        findViewById(R.id.card_dl3).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink3Activity.class)));
+        findViewById(R.id.card_dl4).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink4Activity.class)));
+        findViewById(R.id.card_dl50).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink50Activity.class)));
+        findViewById(R.id.card_dl51).setOnClickListener(v ->
+                startActivity(new Intent(this, DiLink51Activity.class)));
 
         // Overflow: ⋮ button at the bottom of the rail + long-press on logo
         ImageView overflow = findViewById(R.id.nav_overflow);
