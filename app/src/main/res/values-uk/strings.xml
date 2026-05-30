@@ -32,4 +32,18 @@
 
     <string name="recon_placeholder">DL5 Recon — TODO (transplant Dl5ClusterReconRunner from DashCast)</string>
     <string name="fission_placeholder">Fission test — TODO (transplant Dl5VdTestRunner + MirrorDaemon from DashCast)</string>
+
+    <!-- OTA -->
+    <string name="menu_check_updates">🔄 Check for updates</string>
+    <string name="ota_dialog_title">Update available</string>
+    <string name="ota_up_to_date">DashCast DevTools is up to date</string>
+    <string name="ota_btn_update_now">Update</string>
+    <string name="ota_btn_later">Later</string>
+    <string name="ota_downloading">Downloading…</string>
+    <string name="ota_install_failed_fmt">Install failed: %1$s</string>
+    <string name="ota_error_fmt">OTA: %1$s</string>
+    <string name="main_version_fmt" translatable="false">v%1$s (build %2$d)</string>
+    <string name="ota_version_label" translatable="false">DashCast DevTools %1$s</string>
+    <string name="ota_progress_unknown" translatable="false">…</string>
+    <string name="ota_progress_percent" translatable="false">%1$d %%</string>
 </resources>

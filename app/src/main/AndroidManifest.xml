@@ -56,5 +56,10 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+
+        <!-- OTA install result callback (PackageInstaller commit). -->
+        <receiver
+            android:name=".common.InstallResultReceiver"
+            android:exported="false" />
     </application>
 </manifest>

@@ -41,6 +41,21 @@
         android:id="@+id/btn_main_fission"
         android:layout_width="280dp"
         android:layout_height="wrap_content"
-        android:text="@string/main_btn_fission" />
+        android:text="@string/main_btn_fission"
+        android:layout_marginBottom="24dp" />
+
+    <Button
+        android:id="@+id/btn_main_check_updates"
+        android:layout_width="280dp"
+        android:layout_height="wrap_content"
+        android:text="@string/menu_check_updates" />
+
+    <TextView
+        android:id="@+id/tv_main_version"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:textSize="11sp"
+        android:textColor="#666666"
+        android:layout_marginTop="16dp" />
 
 </LinearLayout>
