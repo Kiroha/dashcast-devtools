@@ -161,7 +161,7 @@ public final class Dl3FissionRunner {
      * @param ctx            application context
      * @param targetPkg      package to launch on the VD (e.g. "com.android.settings");
      *                       pass {@code null} to fall back to Settings.
-     * @param clusterSurface valid Surface from {@link FissionActivity}'s SurfaceView
+     * @param clusterSurface valid Surface from {@link Dl3FissionActivity}'s SurfaceView
      * @param mirrorViewW    width of the SurfaceView buffer (1920)
      * @param mirrorViewH    height of the SurfaceView buffer (720)
      * @param listener       event sink

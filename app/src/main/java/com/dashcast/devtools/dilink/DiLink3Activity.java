@@ -17,7 +17,7 @@ import android.content.Intent;
 import com.dashcast.devtools.R;
 import com.dashcast.devtools.common.AppLogger;
 import com.dashcast.devtools.common.Platform;
-import com.dashcast.devtools.fission.FissionActivity;
+import com.dashcast.devtools.fission.Dl3FissionActivity;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.tabs.TabLayout;
 
@@ -127,7 +127,7 @@ public class DiLink3Activity extends AppCompatActivity {
         panelFission = findViewById(R.id.panel_fission_dl3);
         panelFission.findViewById(R.id.btn_dl3_open_fission)
                 .setOnClickListener(v -> startActivity(
-                        new Intent(this, FissionActivity.class)));
+                        new Intent(this, Dl3FissionActivity.class)));
 
         showPanel(TAB_SCREEN88);
     }

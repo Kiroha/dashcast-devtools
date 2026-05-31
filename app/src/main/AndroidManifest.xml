@@ -50,7 +50,7 @@
             android:screenOrientation="landscape" />
 
         <activity
-            android:name=".fission.FissionActivity"
+            android:name=".fission.Dl3FissionActivity"
             android:exported="false"
             android:screenOrientation="landscape" />
 

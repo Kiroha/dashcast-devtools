@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * FissionActivity — DL3 Fission VirtualDisplay pipeline test (F01..F09).
+ * Dl3FissionActivity — DL3 Fission VirtualDisplay pipeline test (F01..F09).
  *
  * <p>Layout:
  * <ul>
@@ -38,9 +38,9 @@ import java.util.Map;
  *   <li>Button "Lancer DL3 Fission" — enabled only after {@code surfaceCreated}</li>
  * </ul>
  */
-public class FissionActivity extends Activity {
+public class Dl3FissionActivity extends Activity {
 
-    private static final String TAG = "FissionActivity";
+    private static final String TAG = "Dl3FissionActivity";
 
     // ── Views ─────────────────────────────────────────────────────────────────
     private TextView     tvCounters;
@@ -216,7 +216,7 @@ public class FissionActivity extends Activity {
                         // Post to UI thread; callback is invoked here (not from synchronized block)
                         mUiHandler.post(() -> {
                             if (mDestroyed) { callback.accept(false); return; }
-                            new AlertDialog.Builder(FissionActivity.this)
+                            new AlertDialog.Builder(Dl3FissionActivity.this)
                                     .setTitle(title)
                                     .setMessage(message)
                                     .setCancelable(false)
