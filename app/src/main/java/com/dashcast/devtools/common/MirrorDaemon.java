@@ -577,7 +577,30 @@ public final class MirrorDaemon {
                 return true;
             }
 
-            // Step 4 — moveRootTaskToDisplay (prefer) or moveTaskToDisplay
+            // Step 4a — setTaskWindowingMode(WINDOWING_MODE_FREEFORM=5) BEFORE the move.
+            // Freeform tasks receive onConfigurationChanged instead of being relaunched
+            // when moved between displays — this bypasses in-onCreate display checks
+            // (e.g. Waze finishAndRemoveTask on getDisplayId()!=0).
+            // Source: OpenBYD 2.1 CarControlImpl / d2.java
+            try {
+                java.lang.reflect.Method setWindowing = iatmCls.getMethod(
+                        "setTaskWindowingMode", int.class, int.class, boolean.class);
+                setWindowing.setAccessible(true);
+                setWindowing.invoke(iatm, taskId, 5 /* WINDOWING_MODE_FREEFORM */, true);
+                sb.append("setTaskWindowingMode(FREEFORM) OK\n");
+            } catch (NoSuchMethodException e1) {
+                try {
+                    java.lang.reflect.Method setWindowing = iatmCls.getMethod(
+                            "setTaskWindowingMode", int.class, int.class);
+                    setWindowing.setAccessible(true);
+                    setWindowing.invoke(iatm, taskId, 5);
+                    sb.append("setTaskWindowingMode(FREEFORM, 2-arg) OK\n");
+                } catch (Exception e2) {
+                    sb.append("WARNING: setTaskWindowingMode not available: ").append(e2.getMessage()).append("\n");
+                }
+            }
+
+            // Step 4b — moveRootTaskToDisplay (prefer) or moveTaskToDisplay
             java.lang.reflect.Method move = null;
             for (java.lang.reflect.Method m : iatmCls.getMethods()) {
                 if ((m.getName().equals("moveRootTaskToDisplay")
@@ -595,6 +618,16 @@ public final class MirrorDaemon {
                   .append(displayId).append(") OK\n");
             } else {
                 sb.append("WARNING: move method not found\n");
+            }
+
+            // Step 4c — setTaskBounds to fit the VD exactly (mirrors OpenBYD d2.java)
+            try {
+                java.lang.reflect.Method resizeTask = iatmCls.getMethod(
+                        "resizeTask", int.class, android.graphics.Rect.class, int.class);
+                resizeTask.invoke(iatm, taskId, new android.graphics.Rect(0, 0, w, h), 1);
+                sb.append("resizeTask(").append(taskId).append(", 0,0,").append(w).append(",").append(h).append(") OK\n");
+            } catch (Exception ignored) {
+                sb.append("resizeTask skipped\n");
             }
 
             // Step 5 — setFocusedTask
