@@ -7,6 +7,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
 import android.os.RemoteException;
+import android.view.MotionEvent;
 import android.view.Surface;
 
 import java.lang.reflect.Method;
@@ -138,6 +139,7 @@ public final class MirrorDaemon {
                 case TRANSACT_MIRROR_START:   return handleMirrorStart(data, reply);
                 case TRANSACT_MIRROR_STOP:    return handleMirrorStop(data, reply);
                 case TRANSACT_CLUSTER_ATTACH: return handleClusterAttach(data, reply);
+                case TRANSACT_INJECT_MOTION:  return handleInjectMotion(data, reply);
                 default: return super.onTransact(code, data, reply, flags);
             }
         }
@@ -231,6 +233,51 @@ public final class MirrorDaemon {
                 log("CLUSTER SC release error: " + e.getMessage());
             }
             sClusterSc = null;
+        }
+        reply.writeNoException();
+        return true;
+    }
+
+    /**
+     * TRANSACT_INJECT_MOTION — injects a {@link MotionEvent} onto the target display using
+     * {@code InputManager.injectInputEvent()} (requires {@code INJECT_EVENTS} permission,
+     * held by uid=2000 shell on BYD ROM).
+     *
+     * <p>Wire format (client side):
+     * <pre>
+     *   writeInterfaceToken(DESCRIPTOR)
+     *   writeInt(displayId)    — target display (1 = cluster)
+     *   writeParcelable(event) — MotionEvent with coords already in display space
+     * </pre>
+     * Reply: {@code writeNoException()} only (fire-and-forget, no ack needed for latency).
+     */
+    private static boolean handleInjectMotion(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        int displayId = data.readInt();
+        MotionEvent event = data.readParcelable(MotionEvent.class.getClassLoader());
+        if (event != null) {
+            try {
+                // MotionEvent must target the correct display for injectInputEvent to route it
+                // setDisplayId is @hide — reflection
+                Method setDisplayId = MotionEvent.class.getDeclaredMethod("setDisplayId", int.class);
+                setDisplayId.setAccessible(true);
+                setDisplayId.invoke(event, displayId);
+
+                // InputManager.getInstance().injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC)
+                // getInstance() is @hide — use reflection
+                Class<?> imCls = Class.forName("android.hardware.input.InputManager");
+                Method getInst = imCls.getDeclaredMethod("getInstance");
+                getInst.setAccessible(true);
+                Object im = getInst.invoke(null);
+                Method inject = imCls.getDeclaredMethod(
+                        "injectInputEvent", android.view.InputEvent.class, int.class);
+                inject.setAccessible(true);
+                inject.invoke(im, event, 0 /* INJECT_INPUT_EVENT_MODE_ASYNC */);
+            } catch (Exception e) {
+                log("INJECT_MOTION ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            } finally {
+                event.recycle();
+            }
         }
         reply.writeNoException();
         return true;

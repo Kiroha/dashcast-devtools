@@ -18,6 +18,7 @@ import com.dashcast.devtools.R;
 import com.dashcast.devtools.common.AppLogger;
 import com.dashcast.devtools.common.Platform;
 import com.dashcast.devtools.fission.Dl3FissionActivity;
+import com.dashcast.devtools.projection.Dl3ProjectionActivity;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.tabs.TabLayout;
 
@@ -37,9 +38,10 @@ public class DiLink3Activity extends AppCompatActivity {
 
     private static final String TAG = "DiLink3Activity";
 
-    private static final int TAB_SCREEN88 = 0;
-    private static final int TAB_RECON    = 1;
+    private static final int TAB_SCREEN88  = 0;
+    private static final int TAB_RECON     = 1;
     private static final int TAB_FISSION   = 2;
+    private static final int TAB_PROJECTION = 3;
 
     // ── Views — Screen88 panel ────────────────────────────────────────────────
     private View         panelScreen88;
@@ -52,6 +54,9 @@ public class DiLink3Activity extends AppCompatActivity {
 
     // ── Views — Fission panel ──────────────────────────────────────────────────
     private View         panelFission;
+
+    // ── Views — Projection panel ─────────────────────────────────────────────
+    private View         panelProjection;
 
     // ── Views — Recon panel ───────────────────────────────────────────────────
     private View         panelRecon;
@@ -90,6 +95,7 @@ public class DiLink3Activity extends AppCompatActivity {
         tabs.addTab(tabs.newTab().setText(getString(R.string.diag_dl3_tab_screen88)));
         tabs.addTab(tabs.newTab().setText(getString(R.string.diag_dl3_tab_recon)));
         tabs.addTab(tabs.newTab().setText(getString(R.string.diag_dl3_tab_fission)));
+        tabs.addTab(tabs.newTab().setText(getString(R.string.diag_dl3_tab_projection)));
         tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override public void onTabSelected(TabLayout.Tab tab) { showPanel(tab.getPosition()); }
             @Override public void onTabUnselected(TabLayout.Tab tab) {}
@@ -128,7 +134,11 @@ public class DiLink3Activity extends AppCompatActivity {
         panelFission.findViewById(R.id.btn_dl3_open_fission)
                 .setOnClickListener(v -> startActivity(
                         new Intent(this, Dl3FissionActivity.class)));
-
+        // ── Projection panel ───────────────────────────────────────────────
+        panelProjection = findViewById(R.id.panel_projection_dl3);
+        panelProjection.findViewById(R.id.btn_dl3_open_projection)
+                .setOnClickListener(v -> startActivity(
+                        new Intent(this, Dl3ProjectionActivity.class)));
         showPanel(TAB_SCREEN88);
     }
 
@@ -148,9 +158,10 @@ public class DiLink3Activity extends AppCompatActivity {
     // ── Panel switching ───────────────────────────────────────────────────────
 
     private void showPanel(int pos) {
-        panelScreen88.setVisibility(pos == TAB_SCREEN88 ? View.VISIBLE : View.GONE);
-        panelRecon.setVisibility(pos == TAB_RECON    ? View.VISIBLE : View.GONE);
-        panelFission.setVisibility(pos == TAB_FISSION ? View.VISIBLE : View.GONE);
+        panelScreen88.setVisibility(pos == TAB_SCREEN88  ? View.VISIBLE : View.GONE);
+        panelRecon.setVisibility(pos == TAB_RECON      ? View.VISIBLE : View.GONE);
+        panelFission.setVisibility(pos == TAB_FISSION   ? View.VISIBLE : View.GONE);
+        panelProjection.setVisibility(pos == TAB_PROJECTION ? View.VISIBLE : View.GONE);
 
         if (pos == TAB_SCREEN88) {
             bindScreen88Header();

@@ -105,6 +105,7 @@
     <string name="diag_dl3_pill_unknown">Платформа невідома</string>
     <string name="diag_dl3_tab_recon">Recon</string>
     <string name="diag_dl3_tab_fission">Fission</string>
+    <string name="diag_dl3_tab_projection">Projection</string>
     <string name="diag_dl3_recon_title">Розвідка DL3</string>
     <string name="diag_dl3_recon_info">25 зондів [App] і [ADB] для картографування доступних можливостей: дисплеї, процеси, API 29, зміна розміру, VirtualDisplay. Display 0 не змінюється.</string>
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>
@@ -144,4 +145,22 @@
     <string name="fission_btn_run">Run DL3 Fission</string>
     <string name="fission_dl3_prompt_title">DL3 cluster check</string>
     <string name="fission_dl3_prompt_msg_fmt">Is %1$s visible on the cluster screen?</string>
+    <string name="projection_title" translatable="false">Projection</string>
+    <string name="projection_header_title" translatable="false">Projection</string>
+    <string name="projection_header_info" translatable="false">SurfaceControl cluster projection</string>
+    <string name="projection_btn_open" translatable="false">Open Projection…</string>
+    <string name="projection_btn_start" translatable="false">Start</string>
+    <string name="projection_btn_stop" translatable="false">Stop</string>
+    <string name="projection_preview_label" translatable="false">Cluster preview</string>
+    <string name="projection_status_idle" translatable="false">Idle</string>
+    <string name="projection_status_starting" translatable="false">Starting…</string>
+    <string name="projection_status_stopping" translatable="false">Stopping…</string>
+    <string name="projection_status_error" translatable="false">Error: %1$s</string>
+    <string name="projection_status_step_vd" translatable="false">Creating VirtualDisplay…</string>
+    <string name="projection_status_step_daemon" translatable="false">Starting daemon…</string>
+    <string name="projection_status_step_bind" translatable="false">Binding…</string>
+    <string name="projection_status_step_attach" translatable="false">CLUSTER_ATTACH…</string>
+    <string name="projection_status_step_launch" translatable="false">Launching %1$s…</string>
+    <string name="projection_status_step_mirror" translatable="false">MIRROR_START…</string>
+    <string name="projection_status_running" translatable="false">Projecting: %1$s</string>
 </resources>

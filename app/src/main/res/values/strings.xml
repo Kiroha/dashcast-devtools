@@ -125,6 +125,7 @@
     <string name="diag_dl3_screen88_title">Compatibilité écran 8.8\"</string>
     <string name="diag_dl3_tab_recon">Recon</string>
     <string name="diag_dl3_tab_fission">Fission</string>
+    <string name="diag_dl3_tab_projection">Projection</string>
     <string name="diag_dl3_recon_title">Reconnaissance DL3</string>
     <string name="diag_dl3_recon_info">25 sondes [App] (Java API) et [ADB] (shell via UID appli) pour cartographier les capacités disponibles : displays, processus, API 29, resize, VirtualDisplay. Aucune modification du display 0.</string>
 
@@ -187,4 +188,24 @@
     <string name="fission_btn_run">Lancer DL3 Fission</string>
     <string name="fission_dl3_prompt_title">Vérification cluster DL3</string>
     <string name="fission_dl3_prompt_msg_fmt">%1$s est-il visible sur l\'écran cluster ?</string>
+
+    <!-- ─── Projection DL3 ──────────────────────────────────────────────────── -->
+    <string name="projection_title">Projection cluster DL3</string>
+    <string name="projection_header_title">Projection temps réel</string>
+    <string name="projection_header_info">Projette une application sur le cluster physique via SurfaceControl.\nLe rectangle ci-dessous reflète l\'écran cluster et accepte le tactile.</string>
+    <string name="projection_btn_open">Ouvrir Projection…</string>
+    <string name="projection_btn_start">Démarrer</string>
+    <string name="projection_btn_stop">Arrêter</string>
+    <string name="projection_preview_label">Aperçu cluster — tactile actif</string>
+    <string name="projection_status_idle">En attente — appuyez sur Démarrer</string>
+    <string name="projection_status_starting">Démarrage…</string>
+    <string name="projection_status_stopping">Arrêt…</string>
+    <string name="projection_status_error">Erreur : %1$s</string>
+    <string name="projection_status_step_vd">Création VirtualDisplay…</string>
+    <string name="projection_status_step_daemon">Démarrage daemon…</string>
+    <string name="projection_status_step_bind">Connexion Binder…</string>
+    <string name="projection_status_step_attach">CLUSTER_ATTACH…</string>
+    <string name="projection_status_step_launch">Lancement %1$s…</string>
+    <string name="projection_status_step_mirror">MIRROR_START…</string>
+    <string name="projection_status_running">Projection active : %1$s</string>
 </resources>

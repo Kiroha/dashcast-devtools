@@ -105,6 +105,7 @@
     <string name="diag_dl3_pill_unknown">Unknown platform</string>
     <string name="diag_dl3_tab_recon">Recon</string>
     <string name="diag_dl3_tab_fission">Fission</string>
+    <string name="diag_dl3_tab_projection">Projection</string>
     <string name="diag_dl3_recon_title">DL3 Reconnaissance</string>
     <string name="diag_dl3_recon_info">25 [App] (Java API) and [ADB] (shell via app UID) probes to map available capabilities: displays, processes, API 29 commands, resizing, VirtualDisplay. Display 0 is never modified.</string>
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>
@@ -144,4 +145,23 @@
     <string name="fission_btn_run">Run DL3 Fission</string>
     <string name="fission_dl3_prompt_title">DL3 cluster check</string>
     <string name="fission_dl3_prompt_msg_fmt">Is %1$s visible on the cluster screen?</string>
+    <!-- Projection DL3 -->
+    <string name="projection_title">DL3 Cluster Projection</string>
+    <string name="projection_header_title">Real-time projection</string>
+    <string name="projection_header_info">Projects an app onto the physical cluster via SurfaceControl.\nThe rectangle below mirrors the cluster screen and accepts touch input.</string>
+    <string name="projection_btn_open">Open Projection…</string>
+    <string name="projection_btn_start">Start</string>
+    <string name="projection_btn_stop">Stop</string>
+    <string name="projection_preview_label">Cluster preview — touch enabled</string>
+    <string name="projection_status_idle">Idle — press Start</string>
+    <string name="projection_status_starting">Starting…</string>
+    <string name="projection_status_stopping">Stopping…</string>
+    <string name="projection_status_error">Error: %1$s</string>
+    <string name="projection_status_step_vd">Creating VirtualDisplay…</string>
+    <string name="projection_status_step_daemon">Starting daemon…</string>
+    <string name="projection_status_step_bind">Binding…</string>
+    <string name="projection_status_step_attach">CLUSTER_ATTACH…</string>
+    <string name="projection_status_step_launch">Launching %1$s…</string>
+    <string name="projection_status_step_mirror">MIRROR_START…</string>
+    <string name="projection_status_running">Projecting: %1$s</string>
 </resources>
