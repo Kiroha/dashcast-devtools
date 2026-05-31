@@ -424,7 +424,7 @@ public final class MirrorDaemon {
                 req.writeInterfaceToken("android.hardware.display.IDisplayManager");
                 req.writeStrongBinder(callback);      // IVirtualDisplayCallback
                 req.writeStrongBinder(null);           // IMediaProjection = null
-                req.writeString("android.uid.shell"); // callerPackageName must match uid=2000
+                req.writeString("com.android.shell"); // callerPackageName — uid=2000 owns "com.android.shell" (sharedUserId="android.uid.shell" ≠ package name)
                 req.writeString("devtools_projection_vd");
                 req.writeInt(w);
                 req.writeInt(h);
