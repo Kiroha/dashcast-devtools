@@ -213,17 +213,16 @@ public class Dl3ProjectionActivity extends Activity {
         // Step 1 — Create VirtualDisplay (surface=null, set after CLUSTER_ATTACH)
         safeRun(() -> setStatus(getString(R.string.projection_status_step_vd)));
         DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-        // VIRTUAL_DISPLAY_FLAG_TRUSTED (0x200, @hide) — required for apps like Waze/Maps
-        // that refuse to launch on untrusted secondary displays (Android 10+ restriction).
-        // PUBLIC and AUTO_MIRROR are NOT used: both require CAPTURE_VIDEO_OUTPUT (signature
-        // permission). The VD doesn't need to be discoverable — apps are routed explicitly
-        // via "am start --display <id>".
-        final int FLAG_TRUSTED = 0x200;
+        // VIRTUAL_DISPLAY_FLAG_PRESENTATION (0x2) — no special permission required.
+        // PUBLIC/AUTO_MIRROR need CAPTURE_VIDEO_OUTPUT (signature), TRUSTED needs
+        // INTERNAL_SYSTEM_WINDOW (signature) — we have neither.
+        // Apps are launched explicitly via "am start --display <id>" from shell (uid=2000)
+        // which bypasses the secondary-display trust check.
         mVd = dm.createVirtualDisplay(
                 "devtools_projection_vd",
                 CLUSTER_W, CLUSTER_H, 160,
                 /*surface=*/ null,
-                FLAG_TRUSTED);
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
         if (mVd == null) throw new RuntimeException("createVirtualDisplay returned null");
         mVdDisplayId  = mVd.getDisplay().getDisplayId();
         mVdLayerStack = getLayerStack(mVd.getDisplay());
