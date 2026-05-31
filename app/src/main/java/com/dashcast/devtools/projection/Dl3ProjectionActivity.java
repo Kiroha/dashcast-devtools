@@ -293,22 +293,22 @@ public class Dl3ProjectionActivity extends Activity {
         }
 
         // Step 5 — Launch target app on VD
-        // Strategy (OpenBYD pattern):
-        //   a) am start --display <id>  — cold start directly on the VD
-        //   b) monkey                   — fallback if a) silently fails
-        //   c) moveRootTaskToDisplay    — if app was already running on display 0,
+        // Strategy:
+        //   a) am start --display <id>  — cold start directly on the VD            ← ONLY THIS
+        //   b) moveRootTaskToDisplay    — if app was already running on display 0,
         //                                 forcefully relocate its root task to the VD.
         //      Requires ActivityTaskManager (reflection), available API 29+.
+        //
+        // NOTE: Do NOT use monkey here. Monkey sends a LAUNCHER intent WITHOUT --display,
+        // which goes to display 0 (default). For singleTask apps, this triggers
+        // FLAG_ACTIVITY_RESET_TASK_IF_NEEDED which moves the task FROM the VD back to
+        // display 0, immediately pausing the app → black screen.
         final String pkg = targetPkg;
         safeRun(() -> setStatus(getString(R.string.projection_status_step_launch, pkg)));
         shellFire("am start --display " + mVdDisplayId
                 + " $(pm resolve-activity --brief " + pkg
                 + " 2>/dev/null | tail -1) 2>/dev/null || true");
-        shellFire("monkey -p " + pkg
-                + " --pct-touch 0 --pct-motion 0 --pct-majornav 0"
-                + " --pct-syskeys 0 --pct-nav 0 --pct-anyevent 0"
-                + " -c android.intent.category.LAUNCHER 1 2>/dev/null");
-        Thread.sleep(800); // let the activity start before we try to move it
+        Thread.sleep(1200); // let the activity start before we try to move it
         moveAppTaskToDisplay(pkg, mVdDisplayId);
 
         // Step 6 — MIRROR_START → tablet SurfaceView preview
