@@ -213,12 +213,16 @@ public class Dl3ProjectionActivity extends Activity {
         // Step 1 — Create VirtualDisplay (surface=null, set after CLUSTER_ATTACH)
         safeRun(() -> setStatus(getString(R.string.projection_status_step_vd)));
         DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+        // VIRTUAL_DISPLAY_FLAG_TRUSTED (0x200, @hide) — required for apps like Waze/Maps
+        // that refuse to launch on untrusted secondary displays (Android 10+ restriction).
+        final int FLAG_TRUSTED = 0x200;
         mVd = dm.createVirtualDisplay(
                 "devtools_projection_vd",
                 CLUSTER_W, CLUSTER_H, 160,
                 /*surface=*/ null,
                 DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
-                        | DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC);
+                        | DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
+                        | FLAG_TRUSTED);
         if (mVd == null) throw new RuntimeException("createVirtualDisplay returned null");
         mVdDisplayId  = mVd.getDisplay().getDisplayId();
         mVdLayerStack = getLayerStack(mVd.getDisplay());
