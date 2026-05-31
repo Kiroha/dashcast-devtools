@@ -430,8 +430,14 @@ public final class MirrorDaemon {
                 req.writeInt(h);
                 req.writeInt(dpi);
                 req.writeInt(0);   // Surface = null (presence marker)
-                // FLAG_PRESENTATION (0x2) | FLAG_TRUSTED (0x200)
-                req.writeInt(DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION | 0x200);
+                // FLAG_TRUSTED (0x200) only — no FLAG_PRESENTATION.
+                // FLAG_PRESENTATION marks the display as "non-interactive" from ATMS's perspective.
+                // On the BYD ROM this causes ATMS to send topResumedGained+topResumedLost in a
+                // single transaction immediately after onResume, which the BYD ActivityThread
+                // interprets as a pause request → black screen.
+                // FLAG_TRUSTED alone is sufficient to bypass the "cannot launch on secondary
+                // screens" restriction (DisplayInfo.FLAG_TRUSTED is what isTrusted() checks).
+                req.writeInt(0x200); // FLAG_TRUSTED
                 req.writeString(null); // uniqueId = null
 
                 sDmBinder.transact(sDmTxCreate, req, rep, 0);
