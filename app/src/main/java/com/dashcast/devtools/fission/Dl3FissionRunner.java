@@ -28,18 +28,16 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 
 /**
- * Dl3FissionRunner — F01..F09 battery test for the DL3 Fission VirtualDisplay pipeline.
+ * Dl3FissionRunner — F01..F10 battery test for the DL3 Fission VirtualDisplay pipeline.
  *
  * <p>Validates the following pipeline end-to-end on DiLink 3
  * (API 29, Qualcomm trinket, cluster = VirtualDisplay xdja displayId=1, layerStack=1):
  * <pre>
- *   VirtualDisplay byd_test_vd (surface=null, layerStack=N)
+ *   F06 CLUSTER_ATTACH: daemon creates SurfaceControl layer (layerStack=1) → Surface output
+ *   VirtualDisplay byd_test_vd (setSurface → cluster output Surface)
  *     → app launched via am start --display N
- *     → MirrorDaemon (uid=2000, app_process64)
- *     → TRANSACT_MIRROR_START(layerStack=N, src=1920×720, view=1920×720)
- *     → SurfaceControl static API 29
- *     → SurfaceView tablette (clusterSurface)
- *     → Cluster physique tableau de bord
+ *     → VD renders into cluster output Surface → SC layer → SurfaceFlinger → cluster physique
+ *   F08 MIRROR_START: also mirrors VD layerStack → SurfaceView tablette (preview + touch)
  * </pre>
  *
  * <p>Design notes:
@@ -126,20 +124,23 @@ public final class Dl3FissionRunner {
                 "Connecter Binder daemon",
                 "ServiceManager.getService(\"devtools_mirror_daemon\") via reflection → non-null."));
         list.add(new TestDef("F06",
-                "Lancer Settings sur VD",
-                "am start --display <vdId> -n com.android.settings/.Settings 2>&1"
-                + " → pas d'erreur am."));
+                "TRANSACT_CLUSTER_ATTACH",
+                "Daemon crée SurfaceControl layer layerStack=1 → Surface output"
+                + " → vd.setSurface() : VD sort directement sur le cluster physique."));
         list.add(new TestDef("F07",
-                "TRANSACT_MIRROR_START",
-                "Binder.transact(vdLayerStack, 1920, 720, vdId, viewW=1920, viewH=720,"
-                + " clusterSurface) → reply.readInt() == 1."));
+                "Lancer app sur VD",
+                "am start --display <vdId> -n <component> 2>&1 → pas d'erreur am."));
         list.add(new TestDef("F08",
-                "Confirmation visuelle cluster",
-                "AlertDialog : Settings est-il visible sur le cluster ?"
-                + " OUI=PASS / NON=FAIL. Timeout 120 s."));
+                "TRANSACT_MIRROR_START (preview tablette)",
+                "Binder.transact(vdLayerStack, 1920, 720, vdId, viewW=1920, viewH=720,"
+                + " tabletSurface) → reply.readInt() == 1. Miroir VD → SurfaceView tablette."));
         list.add(new TestDef("F09",
+                "Confirmation visuelle cluster",
+                "AlertDialog : app est-elle visible sur le cluster physique ?"
+                + " OUI=PASS / NON=FAIL. Timeout 120 s."));
+        list.add(new TestDef("F10",
                 "Cleanup",
-                "TRANSACT_MIRROR_STOP + VD.release() + pkill com.dashcast.devtools.mirrordaemon."));
+                "MIRROR_STOP + VD.release() + pkill (libère aussi le SC layer cluster)."));
         return list;
     }
 
@@ -217,6 +218,9 @@ public final class Dl3FissionRunner {
         // Set by F05
         IBinder        daemonBinder = null;
 
+        // Set by F06 (CLUSTER_ATTACH)
+        Surface        clusterOutputSurface = null;
+
         // Cleanup flags
         boolean mirrorStarted = false;
         boolean abortFromHere = false;
@@ -233,8 +237,9 @@ public final class Dl3FissionRunner {
             case "F05": runF05(ctx, r, st); break;
             case "F06": runF06(ctx, r, st); break;
             case "F07": runF07(ctx, r, st); break;
-            case "F08": runF08(ctx, r, st, listener); break;
-            case "F09": runF09(ctx, r, st); break;
+            case "F08": runF08(ctx, r, st); break;
+            case "F09": runF09(ctx, r, st, listener); break;
+            case "F10": runF10(ctx, r, st); break;
             default: skip(r, "unknown step"); break;
         }
     }
@@ -394,9 +399,68 @@ public final class Dl3FissionRunner {
         }
     }
 
-    // ── F06 — Lancer app sur VD ───────────────────────────────────────────────
+    // ── F06 — TRANSACT_CLUSTER_ATTACH ─────────────────────────────────────────────
 
     private static void runF06(Context ctx, TestResult r, State st) {
+        if (st.abortFromHere) { skip(r, "aborted"); return; }
+        if (st.daemonBinder == null) {
+            r.status = Status.FAIL;
+            r.message = "Binder null (F05 échoué)";
+            st.abortFromHere = true;
+            return;
+        }
+        if (st.vd == null) {
+            r.status = Status.FAIL;
+            r.message = "VD null (F03 échoué)";
+            st.abortFromHere = true;
+            return;
+        }
+        Parcel data  = Parcel.obtain();
+        Parcel reply = Parcel.obtain();
+        try {
+            data.writeInterfaceToken(com.dashcast.devtools.common.MirrorDaemon.DESCRIPTOR);
+            data.writeInt(1);    // layerStack = 1 (cluster BYD)
+            data.writeInt(1920);
+            data.writeInt(720);
+            st.daemonBinder.transact(
+                    com.dashcast.devtools.common.MirrorDaemon.TRANSACT_CLUSTER_ATTACH,
+                    data, reply, 0);
+            reply.readException();
+            int ok = reply.readInt();
+            if (ok == 1) {
+                st.clusterOutputSurface =
+                        reply.readParcelable(Surface.class.getClassLoader());
+                if (st.clusterOutputSurface != null && st.clusterOutputSurface.isValid()) {
+                    st.vd.setSurface(st.clusterOutputSurface);
+                    r.status  = Status.PASS;
+                    r.message = "SC layer layerStack=1 ✓ → vd.setSurface() OK";
+                } else {
+                    r.status  = Status.FAIL;
+                    r.message = "Surface retournée invalide ou null";
+                    st.abortFromHere = true;
+                }
+            } else {
+                r.status  = Status.FAIL;
+                r.message = "CLUSTER_ATTACH retourne ok=0 — voir logcat MirrorDaemon";
+                st.abortFromHere = true;
+            }
+        } catch (android.os.DeadObjectException doe) {
+            r.status  = Status.FAIL;
+            r.message = "Binder mort : " + doe.getMessage();
+            st.abortFromHere = true;
+        } catch (Exception e) {
+            r.status  = Status.FAIL;
+            r.message = e.getClass().getSimpleName() + ": " + e.getMessage();
+            st.abortFromHere = true;
+        } finally {
+            data.recycle();
+            reply.recycle();
+        }
+    }
+
+    // ── F07 — Lancer app sur VD ─────────────────────────────────────────────
+
+    private static void runF07(Context ctx, TestResult r, State st) {
         if (st.abortFromHere) { skip(r, "aborted"); return; }
 
         // Resolve the launcher component for the chosen package
@@ -431,9 +495,9 @@ public final class Dl3FissionRunner {
         }
     }
 
-    // ── F07 — TRANSACT_MIRROR_START ───────────────────────────────────────────
+    // ── F08 — TRANSACT_MIRROR_START (preview tablette) ───────────────────────────
 
-    private static void runF07(Context ctx, TestResult r, State st) {
+    private static void runF08(Context ctx, TestResult r, State st) {
         if (st.abortFromHere) { skip(r, "aborted"); return; }
         if (st.daemonBinder == null) {
             r.status  = Status.FAIL;
@@ -487,9 +551,9 @@ public final class Dl3FissionRunner {
         }
     }
 
-    // ── F08 — Confirmation visuelle cluster ───────────────────────────────────
+    // ── F09 — Confirmation visuelle cluster ────────────────────────────────────────
 
-    private static void runF08(Context ctx, TestResult r, State st, Listener listener) {
+    private static void runF09(Context ctx, TestResult r, State st, Listener listener) {
         if (st.abortFromHere) { skip(r, "aborted"); return; }
 
         // RÈGLE ABSOLUE : CountDownLatch.await() HORS de tout synchronized.
@@ -522,10 +586,10 @@ public final class Dl3FissionRunner {
         }
     }
 
-    // ── F09 — Cleanup ─────────────────────────────────────────────────────────
+    // ── F10 — Cleanup ───────────────────────────────────────────────────────────
 
-    private static void runF09(Context ctx, TestResult r, State st) {
-        // F09 always runs regardless of abortFromHere
+    private static void runF10(Context ctx, TestResult r, State st) {
+        // F09 was mirrorStarted check — also note F10 always runs regardless of abortFromHere
         StringBuilder sb = new StringBuilder();
 
         // 1. TRANSACT_MIRROR_STOP
@@ -551,7 +615,13 @@ public final class Dl3FissionRunner {
             sb.append("VD.release(id=").append(st.vdDisplayId).append(") ✓  ");
         }
 
-        // 3. Kill daemon process
+        // 3. Release cluster output surface
+        if (st.clusterOutputSurface != null) {
+            try { st.clusterOutputSurface.release(); } catch (Exception ignored) {}
+            sb.append("clusterSurface.release() ✓  ");
+        }
+
+        // 4. Kill daemon process
         String kill = shell(ctx, "pkill -f com.dashcast.devtools.mirrordaemon", 4000);
         sb.append("pkill: ").append(kill.trim().isEmpty() ? "OK" : kill.trim());
 

@@ -79,12 +79,22 @@ public final class MirrorDaemon {
     /** TRANSACT 3 — inject a KeyEvent onto the cluster display. */
     public static final int TRANSACT_INJECT_KEY    = 3;
     /** TRANSACT 4 — destroy the mirror. */
-    public static final int TRANSACT_MIRROR_STOP   = 4;
+    public static final int TRANSACT_MIRROR_STOP    = 4;
+    /**
+     * TRANSACT 5 — create a SurfaceControl buffer layer on layerStack=1 (cluster display),
+     * return its {@link Surface} as the output surface of the VirtualDisplay.
+     * Wire: writeInterfaceToken + writeInt(layerStack) + writeInt(w) + writeInt(h).
+     * Reply: writeNoException() + writeInt(1) + writeParcelable(Surface) on success,
+     *        writeInt(0) on failure.
+     */
+    public static final int TRANSACT_CLUSTER_ATTACH = 5;
 
     // ── Daemon state ────────────────────────────────────────────────────────
 
     /** Active display mirror token (created by MIRROR_START, released by MIRROR_STOP). */
     private static volatile IBinder sMirrorToken = null;
+    /** Active cluster SurfaceControl layer (created by CLUSTER_ATTACH, released by MIRROR_STOP). */
+    private static volatile Object sClusterSc = null;
 
     // ── Entry point ─────────────────────────────────────────────────────────
 
@@ -125,8 +135,9 @@ public final class MirrorDaemon {
         protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
                 throws RemoteException {
             switch (code) {
-                case TRANSACT_MIRROR_START: return handleMirrorStart(data, reply);
-                case TRANSACT_MIRROR_STOP:  return handleMirrorStop(data, reply);
+                case TRANSACT_MIRROR_START:   return handleMirrorStart(data, reply);
+                case TRANSACT_MIRROR_STOP:    return handleMirrorStop(data, reply);
+                case TRANSACT_CLUSTER_ATTACH: return handleClusterAttach(data, reply);
                 default: return super.onTransact(code, data, reply, flags);
             }
         }
@@ -208,7 +219,132 @@ public final class MirrorDaemon {
             try { scDestroyDisplay(sMirrorToken); } catch (Exception ignored) {}
             sMirrorToken = null;
         }
+        // Also release cluster SC layer if attached
+        if (sClusterSc != null) {
+            try {
+                Class<?> scCls = Class.forName("android.view.SurfaceControl");
+                Method release = scCls.getDeclaredMethod("release");
+                release.setAccessible(true);
+                release.invoke(sClusterSc);
+                log("CLUSTER SC released");
+            } catch (Exception e) {
+                log("CLUSTER SC release error: " + e.getMessage());
+            }
+            sClusterSc = null;
+        }
         reply.writeNoException();
+        return true;
+    }
+
+    /**
+     * TRANSACT_CLUSTER_ATTACH — creates a SurfaceControl buffer layer assigned to
+     * {@code layerStack} (=1 for the BYD cluster display) and returns its {@link Surface}.
+     * The caller passes this Surface to {@link android.hardware.display.VirtualDisplay#setSurface}
+     * so that anything rendered on the VirtualDisplay is composited directly onto the cluster.
+     *
+     * <p>Wire format (client side):
+     * <pre>
+     *   writeInterfaceToken(DESCRIPTOR)
+     *   writeInt(layerStack)   — target display layerStack (1 = cluster)
+     *   writeInt(w)            — buffer width  (1920)
+     *   writeInt(h)            — buffer height (720)
+     * </pre>
+     * Reply: {@code writeNoException() + writeInt(1) + writeParcelable(Surface)} on success,
+     *        {@code writeNoException() + writeInt(0)} on failure.
+     */
+    private static boolean handleClusterAttach(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        int layerStack = data.readInt();
+        int w          = data.readInt();
+        int h          = data.readInt();
+        log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h);
+        try {
+            Class<?> scCls      = Class.forName("android.view.SurfaceControl");
+            Class<?> sessionCls = Class.forName("android.view.SurfaceSession");
+
+            // 1. SurfaceSession — needed by Builder on API 29
+            Object session = sessionCls.getDeclaredConstructor().newInstance();
+
+            // 2. SurfaceControl.Builder — API 29: Builder(SurfaceSession), API 31+: Builder()
+            Class<?> builderCls = Class.forName("android.view.SurfaceControl$Builder");
+            Object builder;
+            try {
+                java.lang.reflect.Constructor<?> ctor =
+                        builderCls.getDeclaredConstructor(sessionCls);
+                ctor.setAccessible(true);
+                builder = ctor.newInstance(session);
+            } catch (NoSuchMethodException e) {
+                java.lang.reflect.Constructor<?> ctor =
+                        builderCls.getDeclaredConstructor();
+                ctor.setAccessible(true);
+                builder = ctor.newInstance();
+            }
+
+            // 3. Configure: name + buffer size
+            Method mName = builderCls.getDeclaredMethod("setName", String.class);
+            mName.setAccessible(true);
+            mName.invoke(builder, "devtools_cluster_out");
+
+            // setBufferSize (API 30+) or setSize (API 29)
+            try {
+                Method m = builderCls.getDeclaredMethod("setBufferSize", int.class, int.class);
+                m.setAccessible(true); m.invoke(builder, w, h);
+            } catch (NoSuchMethodException e) {
+                Method m = builderCls.getDeclaredMethod("setSize", int.class, int.class);
+                m.setAccessible(true); m.invoke(builder, w, h);
+            }
+
+            // 4. build() → SurfaceControl instance
+            Method build = builderCls.getDeclaredMethod("build");
+            build.setAccessible(true);
+            Object sc = build.invoke(builder);
+
+            // 5. Apply layer properties: setLayerStack + setLayer + show
+            if (Build.VERSION.SDK_INT >= 31) {
+                android.view.SurfaceControl.Transaction tx =
+                        new android.view.SurfaceControl.Transaction();
+                Class<?> txCls = tx.getClass();
+                Method mSetLS  = txCls.getDeclaredMethod("setLayerStack", scCls, int.class);
+                Method mSetLyr = txCls.getDeclaredMethod("setLayer",      scCls, int.class);
+                Method mShow   = txCls.getDeclaredMethod("show",          scCls);
+                mSetLS.setAccessible(true);  mSetLS.invoke(tx, sc, layerStack);
+                mSetLyr.setAccessible(true); mSetLyr.invoke(tx, sc, Integer.MAX_VALUE - 1);
+                mShow.setAccessible(true);   mShow.invoke(tx, sc);
+                tx.apply();
+            } else {
+                // Static transaction API (API ≤ 30)
+                scOpenTransaction();
+                try {
+                    Method mSetLS  = scCls.getDeclaredMethod("setLayerStack", scCls, int.class);
+                    Method mSetLyr = scCls.getDeclaredMethod("setLayer",      scCls, int.class);
+                    Method mSetSz  = scCls.getDeclaredMethod("setSize",       scCls, int.class, int.class);
+                    Method mShow   = scCls.getDeclaredMethod("show",          scCls);
+                    mSetLS.setAccessible(true);  mSetLS.invoke(null, sc, layerStack);
+                    mSetLyr.setAccessible(true); mSetLyr.invoke(null, sc, Integer.MAX_VALUE - 1);
+                    mSetSz.setAccessible(true);  mSetSz.invoke(null, sc, w, h);
+                    mShow.setAccessible(true);   mShow.invoke(null, sc);
+                } finally {
+                    scCloseTransaction();
+                }
+            }
+
+            // 6. Wrap SurfaceControl in a Surface via @hide constructor Surface(SurfaceControl)
+            java.lang.reflect.Constructor<?> surfCtor =
+                    Surface.class.getDeclaredConstructor(scCls);
+            surfCtor.setAccessible(true);
+            Surface outputSurface = (Surface) surfCtor.newInstance(sc);
+
+            sClusterSc = sc;
+            log("CLUSTER_ATTACH OK sc=" + sc + " surface.valid=" + outputSurface.isValid());
+            reply.writeNoException();
+            reply.writeInt(1);
+            reply.writeParcelable(outputSurface, 0);
+
+        } catch (Exception e) {
+            log("CLUSTER_ATTACH ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            reply.writeNoException();
+            reply.writeInt(0);
+        }
         return true;
     }
 
