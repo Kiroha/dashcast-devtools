@@ -300,33 +300,20 @@ public final class MirrorDaemon {
             Object sc = build.invoke(builder);
 
             // 5. Apply layer properties: setLayerStack + setLayer + show
-            if (Build.VERSION.SDK_INT >= 31) {
-                android.view.SurfaceControl.Transaction tx =
-                        new android.view.SurfaceControl.Transaction();
-                Class<?> txCls = tx.getClass();
-                Method mSetLS  = txCls.getDeclaredMethod("setLayerStack", scCls, int.class);
-                Method mSetLyr = txCls.getDeclaredMethod("setLayer",      scCls, int.class);
-                Method mShow   = txCls.getDeclaredMethod("show",          scCls);
-                mSetLS.setAccessible(true);  mSetLS.invoke(tx, sc, layerStack);
-                mSetLyr.setAccessible(true); mSetLyr.invoke(tx, sc, Integer.MAX_VALUE - 1);
-                mShow.setAccessible(true);   mShow.invoke(tx, sc);
-                tx.apply();
-            } else {
-                // Static transaction API (API ≤ 30)
-                scOpenTransaction();
-                try {
-                    Method mSetLS  = scCls.getDeclaredMethod("setLayerStack", scCls, int.class);
-                    Method mSetLyr = scCls.getDeclaredMethod("setLayer",      scCls, int.class);
-                    Method mSetSz  = scCls.getDeclaredMethod("setSize",       scCls, int.class, int.class);
-                    Method mShow   = scCls.getDeclaredMethod("show",          scCls);
-                    mSetLS.setAccessible(true);  mSetLS.invoke(null, sc, layerStack);
-                    mSetLyr.setAccessible(true); mSetLyr.invoke(null, sc, Integer.MAX_VALUE - 1);
-                    mSetSz.setAccessible(true);  mSetSz.invoke(null, sc, w, h);
-                    mShow.setAccessible(true);   mShow.invoke(null, sc);
-                } finally {
-                    scCloseTransaction();
-                }
-            }
+            // Transaction.setLayerStack(SurfaceControl, int) exists since API 29.
+            // The static setLayerStack(SurfaceControl, int) does NOT exist on API 29
+            // (static setLayerStack only accepts IBinder displayToken, not SurfaceControl).
+            // → always use Transaction regardless of SDK level.
+            android.view.SurfaceControl.Transaction tx =
+                    new android.view.SurfaceControl.Transaction();
+            Class<?> txCls = tx.getClass();
+            Method mSetLS  = txCls.getDeclaredMethod("setLayerStack", scCls, int.class);
+            Method mSetLyr = txCls.getDeclaredMethod("setLayer",      scCls, int.class);
+            Method mShow   = txCls.getDeclaredMethod("show",          scCls);
+            mSetLS.setAccessible(true);  mSetLS.invoke(tx, sc, layerStack);
+            mSetLyr.setAccessible(true); mSetLyr.invoke(tx, sc, Integer.MAX_VALUE - 1);
+            mShow.setAccessible(true);   mShow.invoke(tx, sc);
+            tx.apply();
 
             // 6. Wrap SurfaceControl in a Surface via @hide constructor Surface(SurfaceControl)
             java.lang.reflect.Constructor<?> surfCtor =
