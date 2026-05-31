@@ -215,13 +215,15 @@ public class Dl3ProjectionActivity extends Activity {
         DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
         // VIRTUAL_DISPLAY_FLAG_TRUSTED (0x200, @hide) — required for apps like Waze/Maps
         // that refuse to launch on untrusted secondary displays (Android 10+ restriction).
+        // AUTO_MIRROR is NOT used: it requires CAPTURE_VIDEO_OUTPUT (signature permission).
+        // The actual display mirroring is done by the daemon via SurfaceControl — the VD
+        // is only a render target.
         final int FLAG_TRUSTED = 0x200;
         mVd = dm.createVirtualDisplay(
                 "devtools_projection_vd",
                 CLUSTER_W, CLUSTER_H, 160,
                 /*surface=*/ null,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR
-                        | DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
+                DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
                         | FLAG_TRUSTED);
         if (mVd == null) throw new RuntimeException("createVirtualDisplay returned null");
         mVdDisplayId  = mVd.getDisplay().getDisplayId();
