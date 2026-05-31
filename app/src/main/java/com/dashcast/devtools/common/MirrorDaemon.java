@@ -1,7 +1,9 @@
 package com.dashcast.devtools.common;
 
+import android.content.Context;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
+import android.hardware.display.VirtualDisplay;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
@@ -120,13 +122,12 @@ public final class MirrorDaemon {
     private static volatile Method sInjectMethod   = null;
     private static volatile Method sSetDisplayId   = null;  // MotionEvent.setDisplayId — may be null
 
-    // IDisplayManager binder — used to create/manage VirtualDisplay from the daemon.
-    // Shell uid=2000 has INTERNAL_SYSTEM_WINDOW, so FLAG_TRUSTED VDs are allowed.
-    private static volatile IBinder sDmBinder        = null;  // IDisplayManager binder
-    private static volatile IBinder sVdCallback      = null;  // our VD callback (key for VD ops)
-    private static volatile int     sDmTxCreate      = -1;    // TRANSACTION_createVirtualDisplay
-    private static volatile int     sDmTxSetSurface  = -1;    // TRANSACTION_setVirtualDisplaySurface
-    private static volatile int     sDmTxRelease     = -1;    // TRANSACTION_releaseVirtualDisplay
+    // Context used to call DisplayManager.createVirtualDisplay() (OpenBYD approach).
+    // Obtained via ActivityThread.systemMain() + createPackageContext("com.android.shell").
+    // Shell uid=2000 owns "com.android.shell" → validatePackageName() passes.
+    private static volatile Context        sContext       = null;
+    /** Active VirtualDisplay — created by TRANSACT_CREATE_VD, released by MIRROR_STOP. */
+    private static volatile VirtualDisplay sVirtualDisplay = null;
 
     // ── Entry point ─────────────────────────────────────────────────────────
 
@@ -154,7 +155,7 @@ public final class MirrorDaemon {
         log("registered as " + SERVICE_NAME + ", entering Looper");
 
         initInputManager();
-        initDisplayManager();
+        initContext();
 
         Looper.loop();
     }
@@ -270,22 +271,15 @@ public final class MirrorDaemon {
             }
             sClusterSc = null;
         }
-        // Release VirtualDisplay created by daemon (if any)
-        if (sVdCallback != null && sDmBinder != null && sDmTxRelease >= 0) {
+        // Release VirtualDisplay created by daemon (OpenBYD approach).
+        if (sVirtualDisplay != null) {
             try {
-                Parcel req = Parcel.obtain();
-                try {
-                    req.writeInterfaceToken("android.hardware.display.IDisplayManager");
-                    req.writeStrongBinder(sVdCallback);
-                    sDmBinder.transact(sDmTxRelease, req, null, IBinder.FLAG_ONEWAY);
-                    log("VD released");
-                } finally {
-                    req.recycle();
-                }
+                sVirtualDisplay.release();
+                log("VD released");
             } catch (Exception e) {
                 log("VD release ERROR: " + e.getMessage());
             }
-            sVdCallback = null;
+            sVirtualDisplay = null;
         }
         reply.writeNoException();
         return true;
@@ -345,59 +339,67 @@ public final class MirrorDaemon {
     }
 
     /**
-     * Initialises the IDisplayManager binder and transaction codes needed to create/manage
-     * VirtualDisplays from the daemon. Shell uid=2000 holds INTERNAL_SYSTEM_WINDOW which
-     * allows FLAG_TRUSTED VirtualDisplays — the permission check is on calling UID, not package.
+     * Obtains a {@link Context} scoped to {@code com.android.shell} (uid=2000).
      *
-     * <p>Uses reflection to look up {@code TRANSACTION_xxx} constants from
-     * {@code IDisplayManager$Stub}, which is ROM-version-stable.
+     * <p>OpenBYD approach: use the standard {@code DisplayManager.createVirtualDisplay()} API
+     * instead of raw IDisplayManager binder transactions. This avoids hand-crafted Parcel
+     * format issues and ensures DisplayInfo fields (touch, interactive, etc.) are set correctly.
+     *
+     * <p>Implementation: {@code ActivityThread.systemMain()} initialises a system thread
+     * (requires {@code Looper.prepareMainLooper()} already called). Then
+     * {@code getSystemContext().createPackageContext("com.android.shell", CONTEXT_IGNORE_SECURITY)}
+     * returns a Context with the shell package identity. Since the process runs as uid=2000
+     * and {@code getPackagesForUid(2000)} includes {@code "com.android.shell"},
+     * {@code DisplayManagerService.validatePackageName()} accepts it.
      */
-    private static void initDisplayManager() {
+    private static void initContext() {
         try {
-            // Get IDisplayManager binder via DisplayManagerGlobal singleton
-            Class<?> dmgCls = Class.forName("android.hardware.display.DisplayManagerGlobal");
-            Method getInstance = dmgCls.getDeclaredMethod("getInstance");
-            getInstance.setAccessible(true);
-            Object dmg = getInstance.invoke(null);
+            Class<?> atCls = Class.forName("android.app.ActivityThread");
 
-            Field mDmField = dmgCls.getDeclaredField("mDm");
-            mDmField.setAccessible(true);
-            Object iDm = mDmField.get(dmg);  // IDisplayManager (extends IInterface)
+            // Try currentActivityThread() first (non-destructive)
+            Object at = null;
+            try {
+                Method current = atCls.getMethod("currentActivityThread");
+                at = current.invoke(null);
+            } catch (Exception ignored) {}
 
-            // IInterface.asBinder() → IBinder
-            Class<?> iifCls = Class.forName("android.os.IInterface");
-            Method asBinder = iifCls.getDeclaredMethod("asBinder");
-            sDmBinder = (IBinder) asBinder.invoke(iDm);
+            if (at == null) {
+                // No current thread — initialise a system ActivityThread.
+                // Requires Looper.prepareMainLooper() which we already called in main().
+                Method systemMain = atCls.getDeclaredMethod("systemMain");
+                systemMain.setAccessible(true);
+                at = systemMain.invoke(null);
+            }
 
-            // Look up transaction codes from the generated Stub class (ROM-version-safe)
-            Class<?> stubCls = Class.forName("android.hardware.display.IDisplayManager$Stub");
-            sDmTxCreate     = getDeclaredIntField(stubCls, "TRANSACTION_createVirtualDisplay");
-            sDmTxSetSurface = getDeclaredIntField(stubCls, "TRANSACTION_setVirtualDisplaySurface");
-            sDmTxRelease    = getDeclaredIntField(stubCls, "TRANSACTION_releaseVirtualDisplay");
+            Method getSystemCtx = atCls.getDeclaredMethod("getSystemContext");
+            getSystemCtx.setAccessible(true);
+            Context sysCtx = (Context) getSystemCtx.invoke(at);
 
-            log("DisplayManager init OK txCreate=" + sDmTxCreate
-                    + " txSetSurf=" + sDmTxSetSurface
-                    + " txRelease=" + sDmTxRelease);
+            sContext = sysCtx.createPackageContext(
+                    "com.android.shell",
+                    Context.CONTEXT_IGNORE_SECURITY);
+            log("Context init OK pkg=" + sContext.getPackageName()
+                    + " uid=" + android.os.Process.myUid());
         } catch (Exception e) {
-            log("initDisplayManager ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            log("initContext ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
 
-    private static int getDeclaredIntField(Class<?> cls, String name) throws Exception {
-        Field f = cls.getDeclaredField(name);
-        f.setAccessible(true);
-        return f.getInt(null);
-    }
-
     /**
-     * TRANSACT_CREATE_VD — creates a FLAG_TRUSTED VirtualDisplay via IDisplayManager binder.
-     * Shell uid=2000 holds INTERNAL_SYSTEM_WINDOW; the system checks calling UID, not package.
+     * TRANSACT_CREATE_VD — creates a FLAG_TRUSTED VirtualDisplay via the standard
+     * {@link DisplayManager#createVirtualDisplay} API (OpenBYD approach).
+     *
+     * <p>Uses {@link #sContext} (a package context for {@code com.android.shell}, obtained
+     * in {@link #initContext()}). The process runs as uid=2000 which owns
+     * {@code com.android.shell}, so {@code DisplayManagerService.validatePackageName()} passes.
+     *
+     * <p>FLAG_TRUSTED (0x200) is passed to allow apps that check {@code Display.FLAG_TRUSTED}
+     * (e.g. Waze) to run on this display. FLAG_PRESENTATION is intentionally NOT set:
+     * it would mark the display as non-interactive, causing ATMS to revoke topResumed
+     * immediately → instant pause → black screen on BYD ROM.
      *
      * <p>Wire format: writeInterfaceToken + writeInt(w) + writeInt(h) + writeInt(dpi)
      * <p>Reply: writeNoException() + writeInt(displayId) or -1 on failure.
-     *
-     * <p>The VD callback binder ({@link #sVdCallback}) is the key for subsequent
-     * setVirtualDisplaySurface / releaseVirtualDisplay calls. MIRROR_STOP releases it.
      */
     private static boolean handleCreateVd(Parcel data, Parcel reply) {
         data.enforceInterface(DESCRIPTOR);
@@ -406,56 +408,38 @@ public final class MirrorDaemon {
         int dpi = data.readInt();
         log("CREATE_VD " + w + "×" + h + " dpi=" + dpi);
 
-        if (sDmBinder == null || sDmTxCreate < 0) {
-            log("CREATE_VD: IDisplayManager not initialized");
+        if (sContext == null) {
+            log("CREATE_VD: Context not initialized (initContext failed)");
             reply.writeNoException();
             reply.writeInt(-1);
             return true;
         }
 
         try {
-            // Minimal stub callback — DisplayManagerService holds a reference to this binder
-            // as the VD's identity key; we ignore the lifecycle events it sends back.
-            IBinder callback = new Binder();
-
-            Parcel req = Parcel.obtain();
-            Parcel rep = Parcel.obtain();
-            try {
-                req.writeInterfaceToken("android.hardware.display.IDisplayManager");
-                req.writeStrongBinder(callback);      // IVirtualDisplayCallback
-                req.writeStrongBinder(null);           // IMediaProjection = null
-                req.writeString("com.android.shell"); // callerPackageName — uid=2000 owns "com.android.shell" (sharedUserId="android.uid.shell" ≠ package name)
-                req.writeString("devtools_projection_vd");
-                req.writeInt(w);
-                req.writeInt(h);
-                req.writeInt(dpi);
-                req.writeInt(0);   // Surface = null (presence marker)
-                // FLAG_TRUSTED (0x200) only — no FLAG_PRESENTATION.
-                // FLAG_PRESENTATION marks the display as "non-interactive" from ATMS's perspective.
-                // On the BYD ROM this causes ATMS to send topResumedGained+topResumedLost in a
-                // single transaction immediately after onResume, which the BYD ActivityThread
-                // interprets as a pause request → black screen.
-                // FLAG_TRUSTED alone is sufficient to bypass the "cannot launch on secondary
-                // screens" restriction (DisplayInfo.FLAG_TRUSTED is what isTrusted() checks).
-                req.writeInt(0x200); // FLAG_TRUSTED
-                req.writeString(null); // uniqueId = null
-
-                sDmBinder.transact(sDmTxCreate, req, rep, 0);
-                rep.readException();
-                int displayId = rep.readInt();
-
-                if (displayId < 0) throw new RuntimeException("server returned displayId=" + displayId);
-                sVdCallback = callback;
-                log("CREATE_VD OK displayId=" + displayId);
-                reply.writeNoException();
-                reply.writeInt(displayId);
-            } finally {
-                req.recycle();
-                rep.recycle();
+            // Release any previous VD
+            if (sVirtualDisplay != null) {
+                sVirtualDisplay.release();
+                sVirtualDisplay = null;
             }
+
+            DisplayManager dm = sContext.getSystemService(DisplayManager.class);
+            // FLAG_TRUSTED (0x200) — no FLAG_PRESENTATION (see javadoc above)
+            VirtualDisplay vd = dm.createVirtualDisplay(
+                    "devtools_projection_vd",
+                    w, h, dpi,
+                    /*surface=*/ null,
+                    /*flags=*/   0x200 /* FLAG_TRUSTED */);
+
+            if (vd == null) throw new RuntimeException("createVirtualDisplay returned null");
+
+            sVirtualDisplay = vd;
+            int displayId = vd.getDisplay().getDisplayId();
+            log("CREATE_VD OK displayId=" + displayId);
+            reply.writeNoException();
+            reply.writeInt(displayId);
         } catch (Exception e) {
             log("CREATE_VD ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-            sVdCallback = null;
+            sVirtualDisplay = null;
             reply.writeNoException();
             reply.writeInt(-1);
         }
@@ -550,26 +534,13 @@ public final class MirrorDaemon {
             sClusterSc = sc;
             log("CLUSTER_ATTACH OK sc=" + sc + " surface.valid=" + outputSurface.isValid());
 
-            // If daemon created the VD (sVdCallback set by TRANSACT_CREATE_VD), bind
-            // the cluster SC surface to it — equivalent to VirtualDisplay.setSurface().
-            if (sVdCallback != null && sDmBinder != null && sDmTxSetSurface >= 0) {
+            // Bind the cluster SC surface to the VirtualDisplay (OpenBYD approach).
+            if (sVirtualDisplay != null) {
                 try {
-                    Parcel req = Parcel.obtain();
-                    Parcel rep = Parcel.obtain();
-                    try {
-                        req.writeInterfaceToken("android.hardware.display.IDisplayManager");
-                        req.writeStrongBinder(sVdCallback);
-                        req.writeInt(1); // Surface present
-                        outputSurface.writeToParcel(req, 0);
-                        sDmBinder.transact(sDmTxSetSurface, req, rep, 0);
-                        rep.readException();
-                        log("CLUSTER_ATTACH: setVirtualDisplaySurface OK");
-                    } finally {
-                        req.recycle();
-                        rep.recycle();
-                    }
+                    sVirtualDisplay.setSurface(outputSurface);
+                    log("CLUSTER_ATTACH: VD.setSurface OK");
                 } catch (Exception e) {
-                    log("CLUSTER_ATTACH: setVirtualDisplaySurface ERROR: " + e.getMessage());
+                    log("CLUSTER_ATTACH: VD.setSurface ERROR: " + e.getMessage());
                 }
             }
 
