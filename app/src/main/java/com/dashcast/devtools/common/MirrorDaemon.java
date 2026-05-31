@@ -356,9 +356,19 @@ public final class MirrorDaemon {
         try {
             Class<?> atCls = Class.forName("android.app.ActivityThread");
 
-            // app_process already initialises an ActivityThread — just grab it.
+            // Try currentActivityThread() first (non-destructive).
+            // NOTE: returns null when app_process hasn't initialized a thread yet.
             Method current = atCls.getMethod("currentActivityThread");
             Object at = current.invoke(null);
+
+            if (at == null) {
+                // No thread yet — initialise a system ActivityThread.
+                // Requires Looper.prepareMainLooper() already called in main().
+                Method systemMain = atCls.getDeclaredMethod("systemMain");
+                systemMain.setAccessible(true);
+                at = systemMain.invoke(null);
+                log("initContext: used systemMain() (currentActivityThread was null)");
+            }
 
             Method getSystemCtx = atCls.getDeclaredMethod("getSystemContext");
             getSystemCtx.setAccessible(true);
