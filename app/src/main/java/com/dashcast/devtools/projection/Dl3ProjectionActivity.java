@@ -76,8 +76,8 @@ public class Dl3ProjectionActivity extends Activity {
     private boolean         mSurfaceReady = false;
     private boolean         mProjecting   = false;
     private SurfaceHolder   mHolder;
-    private VirtualDisplay  mVd;
-    private Surface         mClusterOutputSurface;
+    // mVd is created by the daemon (TRANSACT_CREATE_VD) so the daemon can use FLAG_TRUSTED
+    // (shell uid=2000 has INTERNAL_SYSTEM_WINDOW; app does not). We only track the IDs.
     private IBinder         mDaemonBinder;
     private int             mVdDisplayId  = -1;
     private int             mVdLayerStack = -1;
@@ -210,25 +210,7 @@ public class Dl3ProjectionActivity extends Activity {
     }
 
     private void doStartProjection(String targetPkg) throws Exception {
-        // Step 1 — Create VirtualDisplay (surface=null, set after CLUSTER_ATTACH)
-        safeRun(() -> setStatus(getString(R.string.projection_status_step_vd)));
-        DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-        // VIRTUAL_DISPLAY_FLAG_PRESENTATION (0x2) — no special permission required.
-        // PUBLIC/AUTO_MIRROR need CAPTURE_VIDEO_OUTPUT (signature), TRUSTED needs
-        // INTERNAL_SYSTEM_WINDOW (signature) — we have neither.
-        // Apps are launched explicitly via "am start --display <id>" from shell (uid=2000)
-        // which bypasses the secondary-display trust check.
-        mVd = dm.createVirtualDisplay(
-                "devtools_projection_vd",
-                CLUSTER_W, CLUSTER_H, 160,
-                /*surface=*/ null,
-                DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION);
-        if (mVd == null) throw new RuntimeException("createVirtualDisplay returned null");
-        mVdDisplayId  = mVd.getDisplay().getDisplayId();
-        mVdLayerStack = getLayerStack(mVd.getDisplay());
-        AppLogger.d(TAG, "VD created id=" + mVdDisplayId + " layerStack=" + mVdLayerStack);
-
-        // Step 2 — Start daemon
+        // Step 1 — Launch daemon (must come first: daemon creates VD with FLAG_TRUSTED)
         safeRun(() -> setStatus(getString(R.string.projection_status_step_daemon)));
         String apkPath  = getPackageCodePath();
         String logPath  = getExternalFilesDir(null) + "/mirrordaemon_projection.log";
@@ -240,7 +222,7 @@ public class Dl3ProjectionActivity extends Activity {
         shellFire(daemonCmd);
         Thread.sleep(1500); // let daemon register
 
-        // Step 3 — Bind to daemon
+        // Step 2 — Bind to daemon
         safeRun(() -> setStatus(getString(R.string.projection_status_step_bind)));
         mDaemonBinder = null;
         for (int attempt = 0; attempt < 6 && mDaemonBinder == null; attempt++) {
@@ -255,30 +237,65 @@ public class Dl3ProjectionActivity extends Activity {
         if (mDaemonBinder == null) throw new RuntimeException("Binder daemon introuvable");
         AppLogger.d(TAG, "Daemon binder OK");
 
-        // Step 4 — CLUSTER_ATTACH → get output Surface, connect VD to it
+        // Step 3 — Ask daemon to create VirtualDisplay with FLAG_TRUSTED
+        // Daemon (shell uid=2000) has INTERNAL_SYSTEM_WINDOW → FLAG_TRUSTED allowed.
+        // Apps like Waze check Display.FLAG_TRUSTED at runtime and refuse untrusted displays.
+        safeRun(() -> setStatus(getString(R.string.projection_status_step_vd)));
+        {
+            Parcel data  = Parcel.obtain();
+            Parcel reply = Parcel.obtain();
+            try {
+                data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                data.writeInt(CLUSTER_W);
+                data.writeInt(CLUSTER_H);
+                data.writeInt(160);
+                mDaemonBinder.transact(MirrorDaemon.TRANSACT_CREATE_VD, data, reply, 0);
+                reply.readException();
+                mVdDisplayId = reply.readInt();
+            } finally {
+                data.recycle();
+                reply.recycle();
+            }
+        }
+        if (mVdDisplayId < 0) throw new RuntimeException("CREATE_VD: daemon returned -1 (FLAG_TRUSTED non supporté sur ce ROM?)");
+        AppLogger.d(TAG, "CREATE_VD OK displayId=" + mVdDisplayId);
+
+        // Get the VD's layerStack (needed for MIRROR_START preview)
+        DisplayManager dm2 = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+        android.view.Display vdDisplay = null;
+        for (int i = 0; i < 5 && vdDisplay == null; i++) {
+            vdDisplay = dm2.getDisplay(mVdDisplayId);
+            if (vdDisplay == null) Thread.sleep(200);
+        }
+        if (vdDisplay == null) throw new RuntimeException("VD display " + mVdDisplayId + " non trouvé");
+        mVdLayerStack = getLayerStack(vdDisplay);
+        AppLogger.d(TAG, "VD layerStack=" + mVdLayerStack);
+
+        // Step 4 — CLUSTER_ATTACH → daemon creates SC layer + internally calls setVirtualDisplaySurface
         safeRun(() -> setStatus(getString(R.string.projection_status_step_attach)));
-        Parcel data  = Parcel.obtain();
-        Parcel reply = Parcel.obtain();
-        try {
-            data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
-            data.writeInt(1);          // layerStack=1 (cluster BYD)
-            data.writeInt(CLUSTER_W);
-            data.writeInt(CLUSTER_H);
-            mDaemonBinder.transact(MirrorDaemon.TRANSACT_CLUSTER_ATTACH, data, reply, 0);
-            reply.readException();
-            int ok = reply.readInt();
-            if (ok != 1) throw new RuntimeException("CLUSTER_ATTACH ok=0");
-            mClusterOutputSurface = reply.readParcelable(Surface.class.getClassLoader());
-            if (mClusterOutputSurface == null || !mClusterOutputSurface.isValid())
-                throw new RuntimeException("Surface cluster invalide");
-            mVd.setSurface(mClusterOutputSurface);
-            AppLogger.d(TAG, "CLUSTER_ATTACH OK, vd.setSurface done");
-        } finally {
-            data.recycle();
-            reply.recycle();
+        {
+            Parcel data  = Parcel.obtain();
+            Parcel reply = Parcel.obtain();
+            try {
+                data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                data.writeInt(1);          // layerStack=1 (cluster BYD)
+                data.writeInt(CLUSTER_W);
+                data.writeInt(CLUSTER_H);
+                mDaemonBinder.transact(MirrorDaemon.TRANSACT_CLUSTER_ATTACH, data, reply, 0);
+                reply.readException();
+                int ok = reply.readInt();
+                if (ok != 1) throw new RuntimeException("CLUSTER_ATTACH ok=0");
+                // Daemon called setVirtualDisplaySurface internally — VD is now bound to cluster SC.
+                // Surface is still returned in reply for backward compat with fission runners.
+                reply.readParcelable(Surface.class.getClassLoader()); // read and discard
+                AppLogger.d(TAG, "CLUSTER_ATTACH OK (daemon set VD surface)");
+            } finally {
+                data.recycle();
+                reply.recycle();
+            }
         }
 
-        // Step 5 — Launch target app on VD via monkey (simplest, always works)
+        // Step 5 — Launch target app on VD
         final String pkg = targetPkg;
         safeRun(() -> setStatus(getString(R.string.projection_status_step_launch, pkg)));
         shellFire("monkey -p " + targetPkg
@@ -365,24 +382,15 @@ public class Dl3ProjectionActivity extends Activity {
             }
             mDaemonBinder = null;
         }
-        // Release cluster output surface
-        if (mClusterOutputSurface != null) {
-            try { mClusterOutputSurface.release(); } catch (Exception ignored) {}
-            mClusterOutputSurface = null;
-        }
-        // Release VirtualDisplay
-        if (mVd != null) {
-            try { mVd.release(); } catch (Exception ignored) {}
-            mVd = null;
-        }
+        // VD + SC surface managed by daemon — released on MIRROR_STOP via IDisplayManager.
+        mVdDisplayId  = -1;
+        mVdLayerStack = -1;
         // Kill daemon
         try {
             AdbClient.executeShell(this, "pkill -f com.dashcast.devtools.mirrordaemon");
         } catch (Exception e) {
             AppLogger.e(TAG, "pkill error", e);
         }
-        mVdDisplayId  = -1;
-        mVdLayerStack = -1;
     }
 
     // ── Shell helpers ─────────────────────────────────────────────────────────
