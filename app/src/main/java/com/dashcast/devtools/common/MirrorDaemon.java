@@ -405,10 +405,14 @@ public final class MirrorDaemon {
      * in {@link #initContext()}). The process runs as uid=2000 which owns
      * {@code com.android.shell}, so {@code DisplayManagerService.validatePackageName()} passes.
      *
-     * <p>FLAG_TRUSTED (0x200) is passed to allow apps that check {@code Display.FLAG_TRUSTED}
-     * (e.g. Waze) to run on this display. FLAG_PRESENTATION is intentionally NOT set:
-     * it would mark the display as non-interactive, causing ATMS to revoke topResumed
-     * immediately → instant pause → black screen on BYD ROM.
+     * <p>Flags = 322 (0x142) — identical to OpenBYD 2.1 :
+     * {@code FLAG_PRESENTATION (0x02) | FLAG_SUPPORTS_TOUCH (0x40) | FLAG_DESTROY_CONTENT_ON_REMOVAL (0x100)}.
+     * FLAG_TRUSTED (0x200) is NOT used by OpenBYD and not needed here: the Waze secondary-screen
+     * rejection is bypassed by launching on display 0 then calling moveRootTaskToDisplay(), not
+     * by a trusted flag on the display.
+     * Note: FLAG_PRESENTATION was previously avoided (v0.6.17) because am-start-on-display
+     * caused an immediate topResumedLost. With launchAndForce the task arrives already alive,
+     * so this issue no longer applies.
      *
      * <p>Wire format: writeInterfaceToken + writeInt(w) + writeInt(h) + writeInt(dpi)
      * <p>Reply: writeNoException() + writeInt(displayId) or -1 on failure.
@@ -435,12 +439,13 @@ public final class MirrorDaemon {
             }
 
             DisplayManager dm = sContext.getSystemService(DisplayManager.class);
-            // FLAG_TRUSTED (0x200) — no FLAG_PRESENTATION (see javadoc above)
+            // Flags = 322 (0x142) — identical to OpenBYD 2.1:
+            // FLAG_PRESENTATION (0x02) | FLAG_SUPPORTS_TOUCH (0x40) | FLAG_DESTROY_CONTENT_ON_REMOVAL (0x100)
             VirtualDisplay vd = dm.createVirtualDisplay(
                     "devtools_projection_vd",
                     w, h, dpi,
                     /*surface=*/ null,
-                    /*flags=*/   0x200 /* FLAG_TRUSTED */);
+                    /*flags=*/   322 /* 0x142: PRESENTATION | SUPPORTS_TOUCH | DESTROY_CONTENT_ON_REMOVAL */);
 
             if (vd == null) throw new RuntimeException("createVirtualDisplay returned null");
 
