@@ -96,6 +96,16 @@ public final class MirrorDaemon {
     private static volatile IBinder sMirrorToken = null;
     /** Active cluster SurfaceControl layer (created by CLUSTER_ATTACH, released by MIRROR_STOP). */
     private static volatile Object sClusterSc = null;
+    /**
+     * Display id of the VirtualDisplay where the app runs — set by MIRROR_START,
+     * used by INJECT_MOTION (same pattern as production MirrorDaemon).
+     */
+    private static volatile int sClusterDisplayId = -1;
+
+    // InputManager reflection — initialised once in main(), reused on every event.
+    private static volatile Object sInputManager   = null;
+    private static volatile Method sInjectMethod   = null;
+    private static volatile Method sSetDisplayId   = null;  // MotionEvent.setDisplayId — may be null
 
     // ── Entry point ─────────────────────────────────────────────────────────
 
@@ -121,6 +131,8 @@ public final class MirrorDaemon {
             return;
         }
         log("registered as " + SERVICE_NAME + ", entering Looper");
+
+        initInputManager();
 
         Looper.loop();
     }
@@ -167,6 +179,7 @@ public final class MirrorDaemon {
         int srcW             = data.readInt();
         int srcH             = data.readInt();
         int clusterDisplayId = data.readInt();
+        sClusterDisplayId    = clusterDisplayId; // store for INJECT_MOTION
         int viewW            = data.readInt();
         int viewH            = data.readInt();
         Surface surface      = data.readParcelable(Surface.class.getClassLoader());
@@ -239,48 +252,56 @@ public final class MirrorDaemon {
     }
 
     /**
-     * TRANSACT_INJECT_MOTION — injects a {@link MotionEvent} onto the target display using
-     * {@code InputManager.injectInputEvent()} (requires {@code INJECT_EVENTS} permission,
-     * held by uid=2000 shell on BYD ROM).
+     * TRANSACT_INJECT_MOTION — injects a {@link MotionEvent} onto the VirtualDisplay.
+     * Called FLAG_ONEWAY by the client (reply may be null) — never writes to reply.
      *
      * <p>Wire format (client side):
      * <pre>
      *   writeInterfaceToken(DESCRIPTOR)
-     *   writeInt(displayId)    — target display (1 = cluster)
-     *   writeParcelable(event) — MotionEvent with coords already in display space
+     *   writeParcelable(event) — MotionEvent with coords in display space (1920×720)
      * </pre>
-     * Reply: {@code writeNoException()} only (fire-and-forget, no ack needed for latency).
+     * The target displayId is {@link #sClusterDisplayId}, set by the last MIRROR_START.
+     * No reply (fire-and-forget — latency-critical at 60-120 events/s).
      */
     private static boolean handleInjectMotion(Parcel data, Parcel reply) {
         data.enforceInterface(DESCRIPTOR);
-        int displayId = data.readInt();
         MotionEvent event = data.readParcelable(MotionEvent.class.getClassLoader());
         if (event != null) {
             try {
-                // MotionEvent must target the correct display for injectInputEvent to route it
-                // setDisplayId is @hide — reflection
-                Method setDisplayId = MotionEvent.class.getDeclaredMethod("setDisplayId", int.class);
-                setDisplayId.setAccessible(true);
-                setDisplayId.invoke(event, displayId);
-
-                // InputManager.getInstance().injectInputEvent(event, INJECT_INPUT_EVENT_MODE_ASYNC)
-                // getInstance() is @hide — use reflection
-                Class<?> imCls = Class.forName("android.hardware.input.InputManager");
-                Method getInst = imCls.getDeclaredMethod("getInstance");
-                getInst.setAccessible(true);
-                Object im = getInst.invoke(null);
-                Method inject = imCls.getDeclaredMethod(
-                        "injectInputEvent", android.view.InputEvent.class, int.class);
-                inject.setAccessible(true);
-                inject.invoke(im, event, 0 /* INJECT_INPUT_EVENT_MODE_ASYNC */);
+                if (sSetDisplayId != null) {
+                    sSetDisplayId.invoke(event, sClusterDisplayId);
+                }
+                if (sInjectMethod != null) {
+                    sInjectMethod.invoke(sInputManager, event, 0 /* ASYNC */);
+                }
             } catch (Exception e) {
                 log("INJECT_MOTION ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
             } finally {
                 event.recycle();
             }
         }
-        reply.writeNoException();
+        // FLAG_ONEWAY: reply is null — do not touch it.
         return true;
+    }
+
+    /** Initialises InputManager + reflection methods once at startup. */
+    private static void initInputManager() {
+        try {
+            Class<?> imCls = Class.forName("android.hardware.input.InputManager");
+            Method getInst = imCls.getDeclaredMethod("getInstance");
+            getInst.setAccessible(true);
+            sInputManager = getInst.invoke(null);
+            sInjectMethod = imCls.getDeclaredMethod(
+                    "injectInputEvent", android.view.InputEvent.class, int.class);
+            sInjectMethod.setAccessible(true);
+            try {
+                sSetDisplayId = MotionEvent.class.getDeclaredMethod("setDisplayId", int.class);
+                sSetDisplayId.setAccessible(true);
+            } catch (Exception ignored) { /* ROM without setDisplayId */ }
+            log("InputManager init OK");
+        } catch (Exception e) {
+            log("initInputManager ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
     }
 
     /**

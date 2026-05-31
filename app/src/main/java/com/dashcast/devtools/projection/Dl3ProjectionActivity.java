@@ -82,6 +82,12 @@ public class Dl3ProjectionActivity extends Activity {
     private int             mVdDisplayId  = -1;
     private int             mVdLayerStack = -1;
 
+    // Projection mapping — letterbox parameters from MIRROR_START, used by forwardTouch.
+    // Same formula as production ClusterMirrorManager: scale = min(viewW/CW, viewH/CH).
+    private int   mProjOffsetX = 0;
+    private int   mProjOffsetY = 0;
+    private float mProjScale   = 0f;  // 0 = not yet set
+
     private final Handler         mUiHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService mExec      = Executors.newSingleThreadExecutor();
 
@@ -298,6 +304,16 @@ public class Dl3ProjectionActivity extends Activity {
             mReply.readException();
             int ok = mReply.readInt();
             AppLogger.d(TAG, "MIRROR_START reply ok=" + ok);
+
+            // Compute and store letterbox projection params for touch mapping.
+            // Must mirror the formula in MirrorDaemon.handleMirrorStart (src=1920×720 → view=1920×720
+            // → scale=1, offsets=0 for our full-size SurfaceView; stored anyway for correctness).
+            float scale   = Math.min((float) CLUSTER_W / CLUSTER_W, (float) CLUSTER_H / CLUSTER_H);
+            int   drawW   = (int) (CLUSTER_W * scale);
+            int   drawH   = (int) (CLUSTER_H * scale);
+            mProjOffsetX  = (CLUSTER_W - drawW) / 2;
+            mProjOffsetY  = (CLUSTER_H - drawH) / 2;
+            mProjScale    = scale;
         } finally {
             mData.recycle();
             mReply.recycle();
@@ -387,35 +403,45 @@ public class Dl3ProjectionActivity extends Activity {
     // ── Touch forwarding ──────────────────────────────────────────────────────
 
     /**
-     * Scales touch event from SurfaceView preview dimensions → cluster dimensions (1920×720)
-     * and forwards via TRANSACT_INJECT_MOTION to the daemon.
+     * Scales touch event from SurfaceView preview dimensions → cluster coordinates (1920×720)
+     * and forwards via TRANSACT_INJECT_MOTION to the daemon (FLAG_ONEWAY, no reply).
      *
-     * <p>The daemon runs as uid=2000 (shell) which holds INJECT_EVENTS permission on BYD ROM.
+     * <p>Touch mapping accounts for letterboxing: the preview SurfaceView has a fixed 1920×720
+     * buffer but may be displayed at a different size. The mProjOffset/Scale values track the
+     * exact same letterbox formula used in MIRROR_START so touches land on the correct pixel.
+     *
+     * <p>The daemon uses its stored {@code sClusterDisplayId} (set during MIRROR_START) to route
+     * the event — no need to send the displayId in the Parcel.
      */
     private void forwardTouch(MotionEvent event, int viewW, int viewH) {
-        if (mDaemonBinder == null || mVdDisplayId < 0) return;
+        if (mDaemonBinder == null || mProjScale <= 0f) return;
         if (viewW <= 0 || viewH <= 0) return;
 
-        float scaleX = (float) CLUSTER_W / viewW;
-        float scaleY = (float) CLUSTER_H / viewH;
+        // Map view coords → cluster coords, accounting for letterbox offset.
+        // mirror of ClusterMirrorManager.startMirrorViaDaemon projection formula.
+        float clusterX = (event.getX() - mProjOffsetX) / mProjScale;
+        float clusterY = (event.getY() - mProjOffsetY) / mProjScale;
+        // Clamp to valid cluster area
+        clusterX = Math.max(0, Math.min(clusterX, CLUSTER_W - 1));
+        clusterY = Math.max(0, Math.min(clusterY, CLUSTER_H - 1));
 
-        // Obtain a copy, scale coords, then send — never modify the original event
         MotionEvent scaled = MotionEvent.obtain(event);
-        scaled.setLocation(event.getX() * scaleX, event.getY() * scaleY);
+        scaled.setLocation(clusterX, clusterY);
 
-        Parcel data  = Parcel.obtain();
-        Parcel reply = Parcel.obtain();
+        Parcel data = Parcel.obtain();
         try {
             data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
-            data.writeInt(mVdDisplayId); // display id = VD display (app is running there)
+            // No displayId in wire — daemon uses sClusterDisplayId set at MIRROR_START
             data.writeParcelable(scaled, 0);
-            mDaemonBinder.transact(MirrorDaemon.TRANSACT_INJECT_MOTION, data, reply, 0);
-            reply.readException();
+            // FLAG_ONEWAY: fire-and-forget, no reply (latency-critical at 60-120 events/s)
+            mDaemonBinder.transact(MirrorDaemon.TRANSACT_INJECT_MOTION, data, null,
+                    android.os.IBinder.FLAG_ONEWAY);
+        } catch (android.os.DeadObjectException doe) {
+            AppLogger.w(TAG, "forwardTouch: daemon binder dead");
         } catch (Exception e) {
             AppLogger.e(TAG, "forwardTouch error", e);
         } finally {
             data.recycle();
-            reply.recycle();
             scaled.recycle();
         }
     }
