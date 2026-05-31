@@ -12,9 +12,12 @@ import android.widget.Toast;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.content.Intent;
+
 import com.dashcast.devtools.R;
 import com.dashcast.devtools.common.AppLogger;
 import com.dashcast.devtools.common.Platform;
+import com.dashcast.devtools.fission.FissionActivity;
 import com.google.android.material.appbar.MaterialToolbar;
 import com.google.android.material.tabs.TabLayout;
 
@@ -36,6 +39,7 @@ public class DiLink3Activity extends AppCompatActivity {
 
     private static final int TAB_SCREEN88 = 0;
     private static final int TAB_RECON    = 1;
+    private static final int TAB_FISSION   = 2;
 
     // ── Views — Screen88 panel ────────────────────────────────────────────────
     private View         panelScreen88;
@@ -45,6 +49,9 @@ public class DiLink3Activity extends AppCompatActivity {
     private View         btnScreen88RunAll;
     private View         btnScreen88CopyReport;
     private LinearLayout llScreen88TestList;
+
+    // ── Views — Fission panel ──────────────────────────────────────────────────
+    private View         panelFission;
 
     // ── Views — Recon panel ───────────────────────────────────────────────────
     private View         panelRecon;
@@ -82,6 +89,7 @@ public class DiLink3Activity extends AppCompatActivity {
         TabLayout tabs = findViewById(R.id.tabs_dl3);
         tabs.addTab(tabs.newTab().setText(getString(R.string.diag_dl3_tab_screen88)));
         tabs.addTab(tabs.newTab().setText(getString(R.string.diag_dl3_tab_recon)));
+        tabs.addTab(tabs.newTab().setText(getString(R.string.diag_dl3_tab_fission)));
         tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
             @Override public void onTabSelected(TabLayout.Tab tab) { showPanel(tab.getPosition()); }
             @Override public void onTabUnselected(TabLayout.Tab tab) {}
@@ -115,6 +123,12 @@ public class DiLink3Activity extends AppCompatActivity {
                 AppLogger.shareWithReport(this, DlReconRunner.buildReport(mReconResults)));
         btnRecon3Share.setEnabled(false);
 
+        // ── Fission panel ─────────────────────────────────────────────────────
+        panelFission = findViewById(R.id.panel_fission_dl3);
+        panelFission.findViewById(R.id.btn_dl3_open_fission)
+                .setOnClickListener(v -> startActivity(
+                        new Intent(this, FissionActivity.class)));
+
         showPanel(TAB_SCREEN88);
     }
 
@@ -135,7 +149,8 @@ public class DiLink3Activity extends AppCompatActivity {
 
     private void showPanel(int pos) {
         panelScreen88.setVisibility(pos == TAB_SCREEN88 ? View.VISIBLE : View.GONE);
-        panelRecon.setVisibility(pos == TAB_RECON ? View.VISIBLE : View.GONE);
+        panelRecon.setVisibility(pos == TAB_RECON    ? View.VISIBLE : View.GONE);
+        panelFission.setVisibility(pos == TAB_FISSION ? View.VISIBLE : View.GONE);
 
         if (pos == TAB_SCREEN88) {
             bindScreen88Header();

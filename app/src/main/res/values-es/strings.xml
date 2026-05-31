@@ -104,6 +104,7 @@
     <string name="diag_dl3_pill_detected">DiLink 3 detectado</string>
     <string name="diag_dl3_pill_unknown">Plataforma desconocida</string>
     <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_tab_fission">Fission</string>
     <string name="diag_dl3_recon_title">Reconocimiento DL3</string>
     <string name="diag_dl3_recon_info">25 sondas [App] y [ADB] para mapear capacidades disponibles: pantallas, procesos, API 29, redimensionado, VirtualDisplay. El display 0 nunca se modifica.</string>
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>

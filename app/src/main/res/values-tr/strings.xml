@@ -104,6 +104,7 @@
     <string name="diag_dl3_pill_detected">DiLink 3 algılandı</string>
     <string name="diag_dl3_pill_unknown">Bilinmeyen platform</string>
     <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_tab_fission">Fission</string>
     <string name="diag_dl3_recon_title">DL3 Keşif</string>
     <string name="diag_dl3_recon_info">Mevcut özellikleri haritalamak için 25 sonda [App] ve [ADB]: ekranlar, işlemler, API 29, boyutlandırma, VirtualDisplay. Display 0 asla değiştirilmez.</string>
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>

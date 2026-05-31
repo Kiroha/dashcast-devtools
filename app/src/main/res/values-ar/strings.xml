@@ -104,6 +104,7 @@
     <string name="diag_dl3_pill_detected">تم اكتشاف DiLink 3</string>
     <string name="diag_dl3_pill_unknown">منصة غير معروفة</string>
     <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_tab_fission">Fission</string>
     <string name="diag_dl3_recon_title">استطلاع DL3</string>
     <string name="diag_dl3_recon_info">25 مسبار [App] و[ADB] لرسم خريطة الإمكانات المتاحة: الشاشات والعمليات وAPI 29 وتغيير الحجم وVirtualDisplay. لا يتم تعديل الشاشة 0 أبدًا.</string>
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>

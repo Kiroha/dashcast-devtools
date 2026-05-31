@@ -104,6 +104,7 @@
     <string name="diag_dl3_pill_detected">DiLink 3 анықталды</string>
     <string name="diag_dl3_pill_unknown">Платформа белгісіз</string>
     <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_tab_fission">Fission</string>
     <string name="diag_dl3_recon_title">DL3 барлау</string>
     <string name="diag_dl3_recon_info">Қолжетімді мүмкіндіктерді картаға түсіруге арналған 25 зонд [App] және [ADB]: дисплейлер, процестер, API 29, өлшемді өзгерту, VirtualDisplay. Display 0 өзгертілмейді.</string>
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>

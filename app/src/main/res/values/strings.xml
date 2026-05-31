@@ -124,6 +124,7 @@
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>
     <string name="diag_dl3_screen88_title">Compatibilité écran 8.8\"</string>
     <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_tab_fission">Fission</string>
     <string name="diag_dl3_recon_title">Reconnaissance DL3</string>
     <string name="diag_dl3_recon_info">25 sondes [App] (Java API) et [ADB] (shell via UID appli) pour cartographier les capacités disponibles : displays, processus, API 29, resize, VirtualDisplay. Aucune modification du display 0.</string>
 

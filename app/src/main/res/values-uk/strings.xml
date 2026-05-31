@@ -104,6 +104,7 @@
     <string name="diag_dl3_pill_detected">DiLink 3 виявлено</string>
     <string name="diag_dl3_pill_unknown">Платформа невідома</string>
     <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_tab_fission">Fission</string>
     <string name="diag_dl3_recon_title">Розвідка DL3</string>
     <string name="diag_dl3_recon_info">25 зондів [App] і [ADB] для картографування доступних можливостей: дисплеї, процеси, API 29, зміна розміру, VirtualDisplay. Display 0 не змінюється.</string>
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>

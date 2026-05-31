@@ -104,6 +104,7 @@
     <string name="diag_dl3_pill_detected">DiLink 3 выяўлены</string>
     <string name="diag_dl3_pill_unknown">Платформа невядомая</string>
     <string name="diag_dl3_tab_recon">Recon</string>
+    <string name="diag_dl3_tab_fission">Fission</string>
     <string name="diag_dl3_recon_title">Разведка DL3</string>
     <string name="diag_dl3_recon_info">25 зандаў [App] і [ADB] для картаграфавання даступных магчымасцяў: дысплеі, працэсы, API 29, змена памеру, VirtualDisplay. Display 0 не мяняецца.</string>
     <string name="diag_dl3_tab_screen88">8.8 Screen</string>
