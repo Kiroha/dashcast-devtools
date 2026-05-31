@@ -135,4 +135,12 @@
     <string name="diag_prompt_no">Hayır</string>
     <string name="diag_dl5_fission_prompt_title">Cluster check</string>
     <string name="diag_dl5_fission_prompt_msg_fmt">Is %1$s visible on the cluster display?\n\n(test on display %2$d)</string>
+
+    <!-- ─── Fission DL3 ──────────────────────────────────────────────────────── -->
+    <string name="fission_header_title">DL3 Fission Test</string>
+    <string name="fission_header_info">F01..F09: validates the VirtualDisplay \u2192 MirrorDaemon \u2192 cluster pipeline.\nDL3 only (API 29, Qualcomm trinket).</string>
+    <string name="fission_cluster_preview">Cluster preview (SurfaceView surface)</string>
+    <string name="fission_btn_run">Run DL3 Fission</string>
+    <string name="fission_dl3_prompt_title">DL3 cluster check</string>
+    <string name="fission_dl3_prompt_msg_fmt">Is %1$s visible on the cluster screen?</string>
 </resources>

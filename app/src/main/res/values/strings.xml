@@ -178,4 +178,12 @@
     <string name="ota_version_label" translatable="false">DashCast DevTools %1$s</string>
     <string name="ota_progress_unknown" translatable="false">…</string>
     <string name="ota_progress_percent" translatable="false">%1$d %%</string>
+
+    <!-- ─── Fission DL3 ──────────────────────────────────────────────────────── -->
+    <string name="fission_header_title">Test Fission DL3</string>
+    <string name="fission_header_info">F01..F09 : valide le pipeline VirtualDisplay → MirrorDaemon → cluster.\nDL3 uniquement (API 29, Qualcomm trinket).</string>
+    <string name="fission_cluster_preview">Aperçu cluster (surface SurfaceView)</string>
+    <string name="fission_btn_run">Lancer DL3 Fission</string>
+    <string name="fission_dl3_prompt_title">Vérification cluster DL3</string>
+    <string name="fission_dl3_prompt_msg_fmt">%1$s est-il visible sur l\'écran cluster ?</string>
 </resources>

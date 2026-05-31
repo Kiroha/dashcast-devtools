@@ -17,7 +17,9 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.dashcast.devtools.R;
+import com.dashcast.devtools.common.AdbClient;
 import com.dashcast.devtools.common.AppLogger;
+import com.dashcast.devtools.common.MirrorDaemon;
 import com.dashcast.devtools.common.Platform;
 import com.dashcast.devtools.dilink.DlReconRunner;
 import com.google.android.material.appbar.MaterialToolbar;
@@ -341,9 +343,28 @@ public class DiLink50Activity extends AppCompatActivity {
         tvFissionCounters.setText(R.string.diag_counters_running);
         flFissionSurfaceWrapper.setVisibility(View.VISIBLE);
 
-        // Obtenir le binder daemon via ServiceManager (null si daemon absent → V05 FAIL gracieux)
-        mVdDaemonBinder = tryGetVdDaemonBinder();
+        // Lancer notre daemon (fire-and-forget via ADB) puis attendre 3 s avant de récupérer
+        // le binder — évite de bloquer l'UI thread tout en laissant le temps au daemon
+        // de s'enregistrer dans ServiceManager.
+        String apkPath = getPackageCodePath();
+        String logPath = "/data/local/tmp/devtools_mirrordaemon_dl5.log";
+        String launchCmd = "setsid sh -c 'CLASSPATH=" + apkPath
+                + " /system/bin/app_process64 -Xnoimage-dex2oat /system/bin"
+                + " --nice-name=" + MirrorDaemon.NICE_NAME
+                + " " + MirrorDaemon.MAIN_CLASS
+                + " </dev/null >" + logPath + " 2>&1' &";
+        AdbClient.executeShell(this, launchCmd);
 
+        // Démarrer les tests 3 s plus tard (temps de démarrage du daemon)
+        mUiHandler.postDelayed(() -> {
+            if (mDestroyed) return;
+            // Obtenir le binder daemon via ServiceManager (null si daemon absent → V05 FAIL gracieux)
+            mVdDaemonBinder = tryGetVdDaemonBinder();
+            startFissionRunner(targetPkg);
+        }, 3000);
+    }
+
+    private void startFissionRunner(String targetPkg) {
         Dl5VdTestRunner.run(this, targetPkg,
                 mVdDaemonBinder,
                 mVdSurfaceHolder != null ? mVdSurfaceHolder.getSurface() : null,
@@ -419,7 +440,7 @@ public class DiLink50Activity extends AppCompatActivity {
             Class<?> sm = Class.forName("android.os.ServiceManager");
             java.lang.reflect.Method get = sm.getDeclaredMethod("getService", String.class);
             get.setAccessible(true);
-            return (android.os.IBinder) get.invoke(null, "byd_mirror_daemon");
+            return (android.os.IBinder) get.invoke(null, MirrorDaemon.SERVICE_NAME);
         } catch (Exception e) {
             AppLogger.w(TAG, "tryGetVdDaemonBinder: " + e);
             return null;

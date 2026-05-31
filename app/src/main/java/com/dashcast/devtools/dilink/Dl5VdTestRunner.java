@@ -12,7 +12,7 @@ import android.view.Surface;
 
 import com.dashcast.devtools.common.AdbClient;
 import com.dashcast.devtools.common.AppLogger;
-import com.dashcast.devtools.dilink.MirrorDaemon;
+import com.dashcast.devtools.common.MirrorDaemon;
 import com.dashcast.devtools.common.Platform;
 
 import java.lang.reflect.Method;

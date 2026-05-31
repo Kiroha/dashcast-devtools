@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  activity_fission.xml — DL3 Fission VirtualDisplay pipeline test (F01..F09).
+
+  Structure (top → bottom):
+    MaterialToolbar (back arrow)
+    NestedScrollView (flex space) → header card + F01..F09 test rows
+    Label + SurfaceView 96 dp (always visible, surface passed to F07)
+    Buttons row: Share (outlined) | Run DL3 Fission (filled)
+-->
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/windowBackground">
+
+    <!-- ─── Toolbar ─────────────────────────────────────────────────────── -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:title="@string/main_btn_fission"
+        app:navigationIcon="?attr/homeAsUpIndicator"
+        style="@style/Widget.MaterialComponents.Toolbar.Primary"/>
+
+    <!-- ─── Scrollable test list ─────────────────────────────────────────── -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Header card -->
+            <com.google.android.material.card.MaterialCardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="16dp"
+                app:cardCornerRadius="20dp"
+                app:cardElevation="0dp"
+                app:strokeWidth="1dp"
+                app:strokeColor="@color/md_outline_variant"
+                app:cardBackgroundColor="@color/md_surface_container_low"
+                app:contentPadding="20dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="8dp">
+
+                        <ImageView
+                            android:layout_width="32dp"
+                            android:layout_height="32dp"
+                            android:src="@android:drawable/ic_dialog_info"
+                            android:tint="@color/md_primary"
+                            android:layout_marginEnd="12dp"
+                            android:contentDescription="@null"/>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/fission_header_title"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
+                                android:textColor="?android:attr/textColorPrimary"/>
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/fission_header_info"
+                                android:textSize="11sp"
+                                android:textColor="@color/md_on_surface_variant"
+                                android:layout_marginTop="2dp"/>
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <!-- Counters -->
+                    <TextView
+                        android:id="@+id/tv_fission_counters"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:textSize="13sp"
+                        android:textColor="?android:attr/textColorSecondary"
+                        android:text="@string/diag_counters_idle"/>
+
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- F01..F09 test rows (inflated programmatically) -->
+            <LinearLayout
+                android:id="@+id/ll_fission_test_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"/>
+
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- ─── SurfaceView cluster preview — always visible ────────────────── -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="2dp"
+        android:text="@string/fission_cluster_preview"
+        android:textSize="11sp"
+        android:textColor="@color/md_on_surface_variant"/>
+
+    <SurfaceView
+        android:id="@+id/sv_fission_cluster"
+        android:layout_width="match_parent"
+        android:layout_height="96dp"
+        android:layout_marginHorizontal="16dp"
+        android:background="#111111"/>
+
+    <!-- ─── Bottom buttons row ───────────────────────────────────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:gravity="end">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_fission_share"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="8dp"
+            android:text="@string/diag_btn_share"/>
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btn_fission_run"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/fission_btn_run"/>
+
+    </LinearLayout>
+
+</LinearLayout>
