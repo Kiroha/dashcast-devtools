@@ -123,7 +123,7 @@ public final class MirrorDaemon {
     private static volatile Method sSetDisplayId   = null;  // MotionEvent.setDisplayId — may be null
 
     // Context used to call DisplayManager.createVirtualDisplay() (OpenBYD approach).
-    // Obtained via ActivityThread.systemMain() + createPackageContext("com.android.shell").
+    // Obtained via ActivityThread.currentActivityThread() + createPackageContext("com.android.shell", 0).
     // Shell uid=2000 owns "com.android.shell" → validatePackageName() passes.
     private static volatile Context        sContext       = null;
     /** Active VirtualDisplay — created by TRANSACT_CREATE_VD, released by MIRROR_STOP. */
@@ -345,9 +345,9 @@ public final class MirrorDaemon {
      * instead of raw IDisplayManager binder transactions. This avoids hand-crafted Parcel
      * format issues and ensures DisplayInfo fields (touch, interactive, etc.) are set correctly.
      *
-     * <p>Implementation: {@code ActivityThread.systemMain()} initialises a system thread
-     * (requires {@code Looper.prepareMainLooper()} already called). Then
-     * {@code getSystemContext().createPackageContext("com.android.shell", CONTEXT_IGNORE_SECURITY)}
+     * <p>Implementation: {@code ActivityThread.currentActivityThread()} returns the existing
+     * ActivityThread initialised by {@code app_process}. Then
+     * {@code getSystemContext().createPackageContext("com.android.shell", 0)}
      * returns a Context with the shell package identity. Since the process runs as uid=2000
      * and {@code getPackagesForUid(2000)} includes {@code "com.android.shell"},
      * {@code DisplayManagerService.validatePackageName()} accepts it.
@@ -356,28 +356,17 @@ public final class MirrorDaemon {
         try {
             Class<?> atCls = Class.forName("android.app.ActivityThread");
 
-            // Try currentActivityThread() first (non-destructive)
-            Object at = null;
-            try {
-                Method current = atCls.getMethod("currentActivityThread");
-                at = current.invoke(null);
-            } catch (Exception ignored) {}
-
-            if (at == null) {
-                // No current thread — initialise a system ActivityThread.
-                // Requires Looper.prepareMainLooper() which we already called in main().
-                Method systemMain = atCls.getDeclaredMethod("systemMain");
-                systemMain.setAccessible(true);
-                at = systemMain.invoke(null);
-            }
+            // app_process already initialises an ActivityThread — just grab it.
+            Method current = atCls.getMethod("currentActivityThread");
+            Object at = current.invoke(null);
 
             Method getSystemCtx = atCls.getDeclaredMethod("getSystemContext");
             getSystemCtx.setAccessible(true);
             Context sysCtx = (Context) getSystemCtx.invoke(at);
 
-            sContext = sysCtx.createPackageContext(
-                    "com.android.shell",
-                    Context.CONTEXT_IGNORE_SECURITY);
+            // Flag 0 — identical to OpenBYD. uid=2000 owns com.android.shell so
+            // validatePackageName() passes without needing CONTEXT_IGNORE_SECURITY.
+            sContext = sysCtx.createPackageContext("com.android.shell", 0);
             log("Context init OK pkg=" + sContext.getPackageName()
                     + " uid=" + android.os.Process.myUid());
         } catch (Exception e) {
