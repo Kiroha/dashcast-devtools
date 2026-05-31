@@ -260,16 +260,13 @@ public class Dl3ProjectionActivity extends Activity {
         if (mVdDisplayId < 0) throw new RuntimeException("CREATE_VD: daemon returned -1 (FLAG_TRUSTED non supporté sur ce ROM?)");
         AppLogger.d(TAG, "CREATE_VD OK displayId=" + mVdDisplayId);
 
-        // Get the VD's layerStack (needed for MIRROR_START preview)
-        DisplayManager dm2 = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-        android.view.Display vdDisplay = null;
-        for (int i = 0; i < 5 && vdDisplay == null; i++) {
-            vdDisplay = dm2.getDisplay(mVdDisplayId);
-            if (vdDisplay == null) Thread.sleep(200);
-        }
-        if (vdDisplay == null) throw new RuntimeException("VD display " + mVdDisplayId + " non trouvé");
-        mVdLayerStack = getLayerStack(vdDisplay);
-        AppLogger.d(TAG, "VD layerStack=" + mVdLayerStack);
+        // Get the VD's layerStack (needed for MIRROR_START preview).
+        // On AOSP (API 29), DisplayManagerService.assignLayerStackLocked() always returns displayId,
+        // so layerStack == displayId. We skip DisplayManager.getDisplay(id) because on FLAG_TRUSTED
+        // VirtualDisplays created from a different process (uid=2000 daemon), getDisplayInfo() may
+        // return null due to OEM access-control checks on FLAG_TRUSTED displays.
+        mVdLayerStack = mVdDisplayId;
+        AppLogger.d(TAG, "VD layerStack=" + mVdLayerStack + " (== displayId, AOSP guarantee)");
 
         // Step 4 — CLUSTER_ATTACH → daemon creates SC layer + internally calls setVirtualDisplaySurface
         safeRun(() -> setStatus(getString(R.string.projection_status_step_attach)));
