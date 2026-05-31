@@ -293,23 +293,40 @@ public class Dl3ProjectionActivity extends Activity {
         }
 
         // Step 5 — Launch target app on VD
-        // Strategy:
-        //   a) am start --display <id>  — cold start directly on the VD            ← ONLY THIS
-        //   b) moveRootTaskToDisplay    — if app was already running on display 0,
-        //                                 forcefully relocate its root task to the VD.
-        //      Requires ActivityTaskManager (reflection), available API 29+.
+        // Strategy (OpenBYD launchAndForce pattern):
+        //   1) Daemon resolves component and does "am start -n <comp>" on display 0.
+        //      Launching on display 0 bypasses ATMS canPlaceEntityOnDisplay() which would
+        //      reject apps like Waze ("cannot be launched on secondary screens").
+        //   2) Daemon polls task ID via IActivityTaskManager.getTasks().
+        //   3) Daemon calls moveRootTaskToDisplay(taskId, displayId) — uid=2000 is exempt
+        //      from hidden-API restrictions, unlike the app process.
+        //   4) Daemon calls setFocusedTask(taskId).
         //
-        // NOTE: Do NOT use monkey here. Monkey sends a LAUNCHER intent WITHOUT --display,
-        // which goes to display 0 (default). For singleTask apps, this triggers
-        // FLAG_ACTIVITY_RESET_TASK_IF_NEEDED which moves the task FROM the VD back to
-        // display 0, immediately pausing the app → black screen.
+        // Do NOT use am start --display: it triggers the canPlaceEntityOnDisplay check
+        // before launch, which Waze fails.
         final String pkg = targetPkg;
         safeRun(() -> setStatus(getString(R.string.projection_status_step_launch, pkg)));
-        shellFire("am start --display " + mVdDisplayId
-                + " $(pm resolve-activity --brief " + pkg
-                + " 2>/dev/null | tail -1) 2>/dev/null || true");
-        Thread.sleep(1200); // let the activity start before we try to move it
-        moveAppTaskToDisplay(pkg, mVdDisplayId);
+        {
+            Parcel lafData  = Parcel.obtain();
+            Parcel lafReply = Parcel.obtain();
+            try {
+                lafData.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                lafData.writeString(pkg);
+                lafData.writeInt(mVdDisplayId);
+                lafData.writeInt(CLUSTER_W);
+                lafData.writeInt(CLUSTER_H);
+                mDaemonBinder.transact(MirrorDaemon.TRANSACT_LAUNCH_AND_FORCE, lafData, lafReply, 0);
+                lafReply.readException();
+                String lafLog = lafReply.readString();
+                AppLogger.d(TAG, "LAUNCH_AND_FORCE: " + lafLog);
+                if (!lafLog.startsWith("OK")) {
+                    throw new RuntimeException("LAUNCH_AND_FORCE: " + lafLog);
+                }
+            } finally {
+                lafData.recycle();
+                lafReply.recycle();
+            }
+        }
 
         // Step 6 — MIRROR_START → tablet SurfaceView preview
         safeRun(() -> setStatus(getString(R.string.projection_status_step_mirror)));
@@ -356,81 +373,8 @@ public class Dl3ProjectionActivity extends Activity {
 
     // ── Stop projection ───────────────────────────────────────────────────────
 
-    /**
-     * Finds the root task of {@code pkg} and moves it to {@code displayId} using
-     * {@code ActivityTaskManager.moveRootTaskToDisplay()} (reflection, @hide, API 29+).
-     *
-     * <p>This is the OpenBYD pattern: if the app was already running on display 0 (or if
-     * {@code am start --display} silently failed), the task is forcefully relocated.
-     *
-     * <p>Does nothing if the method is unavailable on this ROM.
-     */
-    private void moveAppTaskToDisplay(String pkg, int displayId) {
-        try {
-            // ActivityTaskManager.getService() → IActivityTaskManager (Stub singleton)
-            Class<?> atmCls = Class.forName("android.app.ActivityTaskManager");
-            Method getService = atmCls.getDeclaredMethod("getService");
-            getService.setAccessible(true);
-            Object iatm = getService.invoke(null);
-
-            // getTasks(maxNum) → List<ActivityManager.RunningTaskInfo>
-            Class<?> iatmCls = iatm.getClass();
-            Method getTasks = null;
-            for (Method m : iatmCls.getMethods()) {
-                if (m.getName().equals("getTasks") && m.getParameterCount() == 1
-                        && m.getParameterTypes()[0] == int.class) {
-                    getTasks = m;
-                    break;
-                }
-            }
-            if (getTasks == null) {
-                AppLogger.w(TAG, "moveAppTaskToDisplay: getTasks not found");
-                return;
-            }
-            java.util.List<?> tasks = (java.util.List<?>) getTasks.invoke(iatm, 100);
-
-            // Find task whose baseActivity package matches pkg
-            int taskId = -1;
-            for (Object t : tasks) {
-                try {
-                    java.lang.reflect.Field baseActivityField =
-                            t.getClass().getField("baseActivity");
-                    android.content.ComponentName base =
-                            (android.content.ComponentName) baseActivityField.get(t);
-                    if (base != null && pkg.equals(base.getPackageName())) {
-                        java.lang.reflect.Field taskIdField = t.getClass().getField("taskId");
-                        taskId = taskIdField.getInt(t);
-                        break;
-                    }
-                } catch (Exception ignored) {}
-            }
-            if (taskId < 0) {
-                AppLogger.d(TAG, "moveAppTaskToDisplay: no task found for " + pkg);
-                return;
-            }
-
-            // moveRootTaskToDisplay(taskId, displayId) — @hide
-            Method move = null;
-            for (Method m : iatmCls.getMethods()) {
-                if (m.getName().equals("moveRootTaskToDisplay") && m.getParameterCount() == 2) {
-                    move = m;
-                    break;
-                }
-            }
-            if (move == null) {
-                AppLogger.w(TAG, "moveAppTaskToDisplay: moveRootTaskToDisplay not found");
-                return;
-            }
-            move.invoke(iatm, taskId, displayId);
-            AppLogger.d(TAG, "moveRootTaskToDisplay taskId=" + taskId + " → display " + displayId + " OK");
-        } catch (Exception e) {
-            AppLogger.w(TAG, "moveAppTaskToDisplay: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-        }
-    }
-
     private void stopProjection() {
         if (!mProjecting) return;
-        btnStop.setEnabled(false);
         setStatus(getString(R.string.projection_status_stopping));
         mExec.execute(() -> {
             stopProjectionInternal();

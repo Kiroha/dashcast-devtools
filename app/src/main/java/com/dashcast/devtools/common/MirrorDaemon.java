@@ -104,6 +104,18 @@ public final class MirrorDaemon {
      * The daemon stores the VD callback binder (sVdCallback). MIRROR_STOP releases it.
      */
     public static final int TRANSACT_CREATE_VD = 6;
+    /**
+     * TRANSACT 7 — launch {@code pkg} on display 0 then move its task to {@code displayId}.
+     * Wire: writeInterfaceToken + writeString(pkg) + writeInt(displayId) + writeInt(w) + writeInt(h).
+     * Reply: writeNoException() + writeString(log) — "OK taskId=X\n..." or "ERROR: ...".
+     *
+     * <p>Rationale: {@code am start --display <id>} triggers ATMS
+     * {@code canPlaceEntityOnDisplay()} <em>before</em> launch, which rejects apps
+     * like Waze that have not opted into secondary displays.  Launching on display 0
+     * first and moving the task via {@code IActivityTaskManager.moveRootTaskToDisplay()}
+     * bypasses that check.  uid=2000 (shell) is exempt from hidden-API restrictions.
+     */
+    public static final int TRANSACT_LAUNCH_AND_FORCE = 7;
 
     // ── Daemon state ────────────────────────────────────────────────────────
 
@@ -175,7 +187,8 @@ public final class MirrorDaemon {
                 case TRANSACT_MIRROR_STOP:    return handleMirrorStop(data, reply);
                 case TRANSACT_CLUSTER_ATTACH: return handleClusterAttach(data, reply);
                 case TRANSACT_INJECT_MOTION:  return handleInjectMotion(data, reply);
-                case TRANSACT_CREATE_VD:      return handleCreateVd(data, reply);
+                case TRANSACT_CREATE_VD:          return handleCreateVd(data, reply);
+                case TRANSACT_LAUNCH_AND_FORCE:    return handleLaunchAndForce(data, reply);
                 default: return super.onTransact(code, data, reply, flags);
             }
         }
@@ -441,6 +454,160 @@ public final class MirrorDaemon {
             sVirtualDisplay = null;
             reply.writeNoException();
             reply.writeInt(-1);
+        }
+        return true;
+    }
+
+    /**
+     * TRANSACT_LAUNCH_AND_FORCE — launches {@code pkg} on display 0 then moves its task
+     * to {@code displayId} via {@code IActivityTaskManager.moveRootTaskToDisplay()}.
+     *
+     * <p>Strategy (mirrors OpenBYD {@code launchAndForce}):
+     * <ol>
+     *   <li>Resolve LAUNCHER component: {@code cmd package resolve-activity --brief -c
+     *       android.intent.category.LAUNCHER <pkg>}</li>
+     *   <li>Launch on display 0: {@code am start -n <component>} (no {@code --display}).</li>
+     *   <li>Poll for task ID via {@code IActivityTaskManager.getTasks()} — up to 15 × 500 ms.</li>
+     *   <li>Move: {@code moveRootTaskToDisplay(taskId, displayId)} or fallback
+     *       {@code moveTaskToDisplay(taskId, displayId)}.</li>
+     *   <li>Focus: {@code setFocusedTask(taskId)}.</li>
+     * </ol>
+     * Wire: writeInterfaceToken + writeString(pkg) + writeInt(displayId) + writeInt(w) + writeInt(h).
+     * Reply: writeNoException() + writeString(log) — starts with "OK" on success.
+     */
+    @SuppressWarnings({"unchecked", "JavaReflectionMemberAccess"})
+    private static boolean handleLaunchAndForce(Parcel data, Parcel reply)
+            throws RemoteException {
+        data.enforceInterface(DESCRIPTOR);
+        String pkg       = data.readString();
+        int    displayId = data.readInt();
+        int    w         = data.readInt();
+        int    h         = data.readInt();
+
+        StringBuilder sb = new StringBuilder();
+        try {
+            // Step 1 — resolve LAUNCHER component (same as OpenBYD strategy 1)
+            String component = null;
+            try {
+                Process p = Runtime.getRuntime().exec(new String[]{
+                    "cmd", "package", "resolve-activity", "--brief",
+                    "-c", "android.intent.category.LAUNCHER", pkg});
+                java.io.BufferedReader br = new java.io.BufferedReader(
+                        new java.io.InputStreamReader(p.getInputStream()));
+                String line;
+                while ((line = br.readLine()) != null) {
+                    if (line.contains("/") && !line.startsWith("No ")) {
+                        component = line.trim();
+                        break;
+                    }
+                }
+                br.close();
+                p.waitFor();
+            } catch (Exception e) {
+                sb.append("resolve-activity exception: ").append(e.getMessage()).append("\n");
+            }
+
+            // Step 2 — launch on display 0 (no --display to bypass ATMS canPlaceEntityOnDisplay)
+            if (component != null) {
+                Process p2 = Runtime.getRuntime().exec(new String[]{"am", "start", "-n", component});
+                p2.waitFor();
+                sb.append("Strategy 1 (am start -n ").append(component).append("): launched\n");
+            } else {
+                // Fallback: am start by package
+                Process p2 = Runtime.getRuntime().exec(
+                        new String[]{"am", "start", "-a", "android.intent.action.MAIN", pkg});
+                p2.waitFor();
+                sb.append("Strategy 2 (am start -a MAIN ").append(pkg).append("): launched\n");
+            }
+
+            // Step 3 — poll for task ID (up to 15 × 500 ms, same as OpenBYD)
+            Class<?> atmCls  = Class.forName("android.app.ActivityTaskManager");
+            Object   iatm    = atmCls.getMethod("getService").invoke(null);
+            Class<?> iatmCls = iatm.getClass();
+
+            // Find getTasks — try (int, boolean, boolean) first, then (int)
+            java.lang.reflect.Method getTasks = null;
+            for (java.lang.reflect.Method m : iatmCls.getMethods()) {
+                if (!m.getName().equals("getTasks")) continue;
+                Class<?>[] p = m.getParameterTypes();
+                if (p.length == 3 && p[0] == int.class
+                        && p[1] == boolean.class && p[2] == boolean.class) {
+                    getTasks = m; break;
+                }
+                if (p.length == 1 && p[0] == int.class) getTasks = m;
+            }
+            if (getTasks == null) throw new RuntimeException("getTasks not found");
+
+            int taskId = -1;
+            for (int attempt = 0; attempt < 15 && taskId == -1; attempt++) {
+                if (attempt > 0) Thread.sleep(500);
+                java.util.List<?> tasks;
+                if (getTasks.getParameterCount() == 3) {
+                    tasks = (java.util.List<?>) getTasks.invoke(iatm, 100, false, false);
+                } else {
+                    tasks = (java.util.List<?>) getTasks.invoke(iatm, 100);
+                }
+                for (Object t : tasks) {
+                    // Check topActivity or baseActivity package
+                    for (String field : new String[]{"topActivity", "baseActivity"}) {
+                        try {
+                            Object comp = t.getClass().getField(field).get(t);
+                            if (comp instanceof android.content.ComponentName) {
+                                String tPkg = ((android.content.ComponentName) comp).getPackageName();
+                                if (pkg.equals(tPkg)) {
+                                    taskId = t.getClass().getField("taskId").getInt(t);
+                                    sb.append("Found taskId=").append(taskId)
+                                      .append(" (attempt ").append(attempt).append(")\n");
+                                    break;
+                                }
+                            }
+                        } catch (Exception ignored) {}
+                    }
+                    if (taskId != -1) break;
+                }
+            }
+            if (taskId == -1) {
+                reply.writeNoException();
+                reply.writeString("ERROR: taskId not found for " + pkg + "\n" + sb);
+                return true;
+            }
+
+            // Step 4 — moveRootTaskToDisplay (prefer) or moveTaskToDisplay
+            java.lang.reflect.Method move = null;
+            for (java.lang.reflect.Method m : iatmCls.getMethods()) {
+                if ((m.getName().equals("moveRootTaskToDisplay")
+                        || m.getName().equals("moveTaskToDisplay"))
+                        && m.getParameterCount() == 2
+                        && m.getParameterTypes()[0] == int.class
+                        && m.getParameterTypes()[1] == int.class) {
+                    if (move == null || m.getName().equals("moveRootTaskToDisplay")) move = m;
+                }
+            }
+            if (move != null) {
+                move.setAccessible(true);
+                move.invoke(iatm, taskId, displayId);
+                sb.append(move.getName()).append("(").append(taskId).append(", ")
+                  .append(displayId).append(") OK\n");
+            } else {
+                sb.append("WARNING: move method not found\n");
+            }
+
+            // Step 5 — setFocusedTask
+            try {
+                java.lang.reflect.Method setFocused = iatmCls.getMethod("setFocusedTask", int.class);
+                setFocused.invoke(iatm, taskId);
+                sb.append("setFocusedTask(").append(taskId).append(") OK\n");
+            } catch (Exception ignored) {}
+
+            log("LAUNCH_AND_FORCE pkg=" + pkg + " → display " + displayId + " taskId=" + taskId);
+            reply.writeNoException();
+            reply.writeString("OK taskId=" + taskId + "\n" + sb);
+
+        } catch (Exception e) {
+            log("LAUNCH_AND_FORCE ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            reply.writeNoException();
+            reply.writeString("ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage()
+                    + "\n" + sb);
         }
         return true;
     }
