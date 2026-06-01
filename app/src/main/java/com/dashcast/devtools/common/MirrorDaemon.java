@@ -10,11 +10,20 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Parcel;
 import android.os.RemoteException;
+import android.util.DisplayMetrics;
+import android.view.Display;
 import android.view.MotionEvent;
 import android.view.Surface;
+import android.view.SurfaceHolder;
+import android.view.SurfaceView;
+import android.view.View;
+import android.view.WindowManager;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * MirrorDaemon — DevTools daemon shell uid=2000 (app_process64).
@@ -123,6 +132,10 @@ public final class MirrorDaemon {
     private static volatile IBinder sMirrorToken = null;
     /** Active cluster SurfaceControl layer (created by CLUSTER_ATTACH, released by MIRROR_STOP). */
     private static volatile Object sClusterSc = null;
+    /** Active cluster overlay SurfaceView host (OpenBYD-style path, released by MIRROR_STOP). */
+    private static volatile View sClusterOverlayView = null;
+    /** Display-scoped window manager that owns {@link #sClusterOverlayView}. */
+    private static volatile WindowManager sClusterOverlayWindowManager = null;
     /**
      * Display id of the VirtualDisplay where the app runs — set by MIRROR_START,
      * used by INJECT_MOTION (same pattern as production MirrorDaemon).
@@ -284,6 +297,7 @@ public final class MirrorDaemon {
             }
             sClusterSc = null;
         }
+        releaseClusterOverlay();
         // Release VirtualDisplay created by daemon (OpenBYD approach).
         if (sVirtualDisplay != null) {
             try {
@@ -672,6 +686,23 @@ public final class MirrorDaemon {
         int w          = data.readInt();
         int h          = data.readInt();
         log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h);
+
+        Surface overlaySurface = tryAttachClusterOverlay(layerStack, w, h);
+        if (overlaySurface != null) {
+            if (sVirtualDisplay != null) {
+                try {
+                    sVirtualDisplay.setSurface(overlaySurface);
+                    log("CLUSTER_ATTACH: overlay VD.setSurface OK");
+                } catch (Exception e) {
+                    log("CLUSTER_ATTACH: overlay VD.setSurface ERROR: " + e.getMessage());
+                }
+            }
+            reply.writeNoException();
+            reply.writeInt(1);
+            reply.writeParcelable(overlaySurface, 0);
+            return true;
+        }
+
         try {
             Class<?> scCls      = Class.forName("android.view.SurfaceControl");
             Class<?> sessionCls = Class.forName("android.view.SurfaceSession");
@@ -758,6 +789,181 @@ public final class MirrorDaemon {
             reply.writeInt(0);
         }
         return true;
+    }
+
+    private static Surface tryAttachClusterOverlay(int displayIdHint, int w, int h) {
+        if (sContext == null) {
+            log("CLUSTER_ATTACH overlay skipped: context unavailable");
+            return null;
+        }
+
+        try {
+            releaseClusterOverlay();
+
+            Display targetDisplay = resolveClusterDisplay(displayIdHint);
+            if (targetDisplay == null) {
+                log("CLUSTER_ATTACH overlay skipped: no display for hint=" + displayIdHint);
+                return null;
+            }
+
+            CountDownLatch latch = new CountDownLatch(1);
+            AtomicReference<Surface> surfaceRef = new AtomicReference<>();
+            AtomicReference<RuntimeException> errorRef = new AtomicReference<>();
+
+            Runnable attach = () -> {
+                try {
+                    Context displayContext = sContext.createDisplayContext(targetDisplay);
+                    WindowManager windowManager = displayContext.getSystemService(WindowManager.class);
+                    if (windowManager == null) {
+                        throw new RuntimeException("window manager unavailable");
+                    }
+
+                    SurfaceView surfaceView = new SurfaceView(displayContext);
+                    SurfaceHolder holder = surfaceView.getHolder();
+                    holder.setFixedSize(w, h);
+                    holder.addCallback(new SurfaceHolder.Callback() {
+                        @Override
+                        public void surfaceCreated(SurfaceHolder surfaceHolder) {
+                            Surface surface = surfaceHolder.getSurface();
+                            if (surface != null && surface.isValid()) {
+                                surfaceRef.compareAndSet(null, surface);
+                                latch.countDown();
+                            }
+                        }
+
+                        @Override
+                        public void surfaceChanged(SurfaceHolder surfaceHolder, int format, int width, int height) {
+                            Surface surface = surfaceHolder.getSurface();
+                            if (surface != null && surface.isValid()) {
+                                surfaceRef.compareAndSet(null, surface);
+                                latch.countDown();
+                            }
+                        }
+
+                        @Override
+                        public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
+                        }
+                    });
+
+                    WindowManager.LayoutParams lp = createOverlayLayoutParams(displayContext, targetDisplay, w, h);
+                    windowManager.addView(surfaceView, lp);
+
+                    sClusterOverlayWindowManager = windowManager;
+                    sClusterOverlayView = surfaceView;
+                    log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
+                } catch (Exception e) {
+                    errorRef.set(new RuntimeException(e));
+                    latch.countDown();
+                }
+            };
+
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                attach.run();
+            } else {
+                new android.os.Handler(Looper.getMainLooper()).post(attach);
+            }
+
+            if (!latch.await(2, TimeUnit.SECONDS)) {
+                log("CLUSTER_ATTACH overlay timed out waiting for surface");
+                releaseClusterOverlay();
+                return null;
+            }
+
+            RuntimeException error = errorRef.get();
+            if (error != null) {
+                log("CLUSTER_ATTACH overlay ERROR: " + error.getCause().getMessage());
+                releaseClusterOverlay();
+                return null;
+            }
+
+            Surface surface = surfaceRef.get();
+            if (surface == null || !surface.isValid()) {
+                log("CLUSTER_ATTACH overlay produced no valid surface");
+                releaseClusterOverlay();
+                return null;
+            }
+            return surface;
+        } catch (Exception e) {
+            log("CLUSTER_ATTACH overlay failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            releaseClusterOverlay();
+            return null;
+        }
+    }
+
+    private static WindowManager.LayoutParams createOverlayLayoutParams(
+            Context displayContext, Display targetDisplay, int w, int h) {
+        int overlayType;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            overlayType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
+        } else {
+            overlayType = WindowManager.LayoutParams.TYPE_PHONE;
+        }
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                overlayType,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                android.graphics.PixelFormat.TRANSLUCENT);
+        lp.setTitle("devtools_cluster_overlay");
+        lp.x = 0;
+        lp.y = 0;
+        lp.width = w;
+        lp.height = h;
+        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
+        DisplayMetrics metrics = displayContext.getResources().getDisplayMetrics();
+        lp.format = android.graphics.PixelFormat.TRANSLUCENT;
+        lp.packageName = displayContext.getPackageName();
+        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
+        lp.verticalMargin = 0f;
+        lp.horizontalMargin = 0f;
+        log("CLUSTER_ATTACH overlay params type=" + overlayType
+                + " targetDisplay=" + targetDisplay.getDisplayId()
+                + " metrics=" + metrics.widthPixels + "x" + metrics.heightPixels);
+        return lp;
+    }
+
+    private static Display resolveClusterDisplay(int displayIdHint) {
+        DisplayManager dm = sContext.getSystemService(DisplayManager.class);
+        if (dm == null) return null;
+
+        Display display = dm.getDisplay(displayIdHint);
+        if (display != null) return display;
+
+        for (Display candidate : dm.getDisplays()) {
+            String name = candidate.getName();
+            if (name == null) continue;
+            String lowered = name.toLowerCase(java.util.Locale.US);
+            if (lowered.contains("cluster") || lowered.contains("fission")) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private static void releaseClusterOverlay() {
+        final View overlayView = sClusterOverlayView;
+        final WindowManager windowManager = sClusterOverlayWindowManager;
+        sClusterOverlayView = null;
+        sClusterOverlayWindowManager = null;
+        if (overlayView == null || windowManager == null) {
+            return;
+        }
+
+        Runnable release = () -> {
+            try {
+                windowManager.removeViewImmediate(overlayView);
+                log("CLUSTER_ATTACH overlay removed");
+            } catch (Exception e) {
+                log("CLUSTER_ATTACH overlay remove error: " + e.getMessage());
+            }
+        };
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            release.run();
+        } else {
+            new android.os.Handler(Looper.getMainLooper()).post(release);
+        }
     }
 
     // ── ServiceManager ───────────────────────────────────────────────────────
