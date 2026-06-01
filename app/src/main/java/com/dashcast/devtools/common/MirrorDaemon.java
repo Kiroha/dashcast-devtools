@@ -21,6 +21,11 @@ import android.view.WindowManager;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -546,7 +551,7 @@ public final class MirrorDaemon {
 
             // Find getTasks — try (int, boolean, boolean) first, then (int)
             java.lang.reflect.Method getTasks = null;
-            for (java.lang.reflect.Method m : iatmCls.getMethods()) {
+            for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
                 if (!m.getName().equals("getTasks")) continue;
                 Class<?>[] p = m.getParameterTypes();
                 if (p.length == 3 && p[0] == int.class
@@ -556,6 +561,7 @@ public final class MirrorDaemon {
                 if (p.length == 1 && p[0] == int.class) getTasks = m;
             }
             if (getTasks == null) throw new RuntimeException("getTasks not found");
+            getTasks.setAccessible(true);
 
             int taskId = -1;
             for (int attempt = 0; attempt < 15 && taskId == -1; attempt++) {
@@ -616,7 +622,7 @@ public final class MirrorDaemon {
 
             // Step 4b — moveRootTaskToDisplay (prefer) or moveTaskToDisplay
             java.lang.reflect.Method move = null;
-            for (java.lang.reflect.Method m : iatmCls.getMethods()) {
+            for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
                 if ((m.getName().equals("moveRootTaskToDisplay")
                         || m.getName().equals("moveTaskToDisplay"))
                         && m.getParameterCount() == 2
@@ -631,7 +637,8 @@ public final class MirrorDaemon {
                 sb.append(move.getName()).append("(").append(taskId).append(", ")
                   .append(displayId).append(") OK\n");
             } else {
-                sb.append("WARNING: move method not found\n");
+                sb.append("WARNING: move method not found on ")
+                  .append(iatmCls.getName()).append("\n");
             }
 
             // Step 4c — setTaskBounds to fit the VD exactly (mirrors OpenBYD d2.java)
@@ -813,6 +820,9 @@ public final class MirrorDaemon {
             Runnable attach = () -> {
                 try {
                     Context displayContext = sContext.createDisplayContext(targetDisplay);
+                    if (displayContext == null) {
+                        throw new RuntimeException("createDisplayContext returned null");
+                    }
                     WindowManager windowManager = displayContext.getSystemService(WindowManager.class);
                     if (windowManager == null) {
                         throw new RuntimeException("window manager unavailable");
@@ -871,7 +881,9 @@ public final class MirrorDaemon {
 
             RuntimeException error = errorRef.get();
             if (error != null) {
-                log("CLUSTER_ATTACH overlay ERROR: " + error.getCause().getMessage());
+                Throwable cause = error.getCause() != null ? error.getCause() : error;
+                log("CLUSTER_ATTACH overlay ERROR: " + cause.getClass().getSimpleName()
+                        + ": " + cause.getMessage());
                 releaseClusterOverlay();
                 return null;
             }
@@ -912,7 +924,8 @@ public final class MirrorDaemon {
         lp.width = w;
         lp.height = h;
         lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
-        DisplayMetrics metrics = displayContext.getResources().getDisplayMetrics();
+        DisplayMetrics metrics = new DisplayMetrics();
+        targetDisplay.getRealMetrics(metrics);
         lp.format = android.graphics.PixelFormat.TRANSLUCENT;
         lp.packageName = displayContext.getPackageName();
         lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
@@ -934,7 +947,7 @@ public final class MirrorDaemon {
         for (Display candidate : dm.getDisplays()) {
             String name = candidate.getName();
             if (name == null) continue;
-            String lowered = name.toLowerCase(java.util.Locale.US);
+            String lowered = name.toLowerCase(Locale.US);
             if (lowered.contains("cluster") || lowered.contains("fission")) {
                 return candidate;
             }
@@ -963,6 +976,43 @@ public final class MirrorDaemon {
             release.run();
         } else {
             new android.os.Handler(Looper.getMainLooper()).post(release);
+        }
+    }
+
+    private static List<Method> getAllMethods(Class<?> type) {
+        Set<String> seen = new LinkedHashSet<>();
+        List<Method> methods = new ArrayList<>();
+        Class<?> current = type;
+        while (current != null) {
+            addMethods(current.getDeclaredMethods(), methods, seen);
+            addMethods(current.getMethods(), methods, seen);
+            for (Class<?> iface : current.getInterfaces()) {
+                collectInterfaceMethods(iface, methods, seen);
+            }
+            current = current.getSuperclass();
+        }
+        return methods;
+    }
+
+    private static void collectInterfaceMethods(Class<?> iface, List<Method> methods, Set<String> seen) {
+        addMethods(iface.getDeclaredMethods(), methods, seen);
+        for (Class<?> parent : iface.getInterfaces()) {
+            collectInterfaceMethods(parent, methods, seen);
+        }
+    }
+
+    private static void addMethods(Method[] source, List<Method> out, Set<String> seen) {
+        for (Method method : source) {
+            StringBuilder signature = new StringBuilder(method.getName()).append('(');
+            Class<?>[] params = method.getParameterTypes();
+            for (int i = 0; i < params.length; i++) {
+                if (i > 0) signature.append(',');
+                signature.append(params[i].getName());
+            }
+            signature.append(')');
+            if (seen.add(signature.toString())) {
+                out.add(method);
+            }
         }
     }
 
