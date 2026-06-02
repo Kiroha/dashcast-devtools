@@ -563,7 +563,8 @@ public final class MirrorDaemon {
             if (getTasks == null) throw new RuntimeException("getTasks not found");
             getTasks.setAccessible(true);
 
-            int taskId = -1;
+            int taskId  = -1;
+            int stackId = -1;
             for (int attempt = 0; attempt < 15 && taskId == -1; attempt++) {
                 if (attempt > 0) Thread.sleep(500);
                 java.util.List<?> tasks;
@@ -581,7 +582,12 @@ public final class MirrorDaemon {
                                 String tPkg = ((android.content.ComponentName) comp).getPackageName();
                                 if (pkg.equals(tPkg)) {
                                     taskId = t.getClass().getField("taskId").getInt(t);
+                                    // stackId available in API 29 RunningTaskInfo (deprecated in 31)
+                                    try {
+                                        stackId = t.getClass().getField("stackId").getInt(t);
+                                    } catch (Exception ignored) {}
                                     sb.append("Found taskId=").append(taskId)
+                                      .append(" stackId=").append(stackId)
                                       .append(" (attempt ").append(attempt).append(")\n");
                                     break;
                                 }
@@ -620,25 +626,63 @@ public final class MirrorDaemon {
                 }
             }
 
-            // Step 4b — moveRootTaskToDisplay (prefer) or moveTaskToDisplay
-            java.lang.reflect.Method move = null;
-            for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
-                if ((m.getName().equals("moveRootTaskToDisplay")
-                        || m.getName().equals("moveTaskToDisplay"))
-                        && m.getParameterCount() == 2
-                        && m.getParameterTypes()[0] == int.class
-                        && m.getParameterTypes()[1] == int.class) {
-                    if (move == null || m.getName().equals("moveRootTaskToDisplay")) move = m;
+            // Step 4b — move task/stack to the VD display.
+            // API 29 (Android 10): stacks are the unit of display placement →
+            //   moveStackToDisplay(stackId, displayId)  — needs stackId, not taskId
+            // API 31+ (Android 12): root tasks replaced stacks →
+            //   moveRootTaskToDisplay(taskId, displayId) or moveTaskToDisplay(taskId, displayId)
+            boolean moved = false;
+
+            // --- Primary: moveStackToDisplay (API 29) ---
+            if (!moved && stackId != -1) {
+                for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
+                    if (m.getName().equals("moveStackToDisplay")
+                            && m.getParameterCount() == 2
+                            && m.getParameterTypes()[0] == int.class
+                            && m.getParameterTypes()[1] == int.class) {
+                        m.setAccessible(true);
+                        m.invoke(iatm, stackId, displayId);
+                        sb.append("moveStackToDisplay(stackId=").append(stackId)
+                          .append(", ").append(displayId).append(") OK\n");
+                        moved = true;
+                        break;
+                    }
                 }
             }
-            if (move != null) {
-                move.setAccessible(true);
-                move.invoke(iatm, taskId, displayId);
-                sb.append(move.getName()).append("(").append(taskId).append(", ")
-                  .append(displayId).append(") OK\n");
-            } else {
-                sb.append("WARNING: move method not found on ")
-                  .append(iatmCls.getName()).append("\n");
+
+            // --- Fallback: moveRootTaskToDisplay / moveTaskToDisplay (API 31+) ---
+            if (!moved) {
+                java.lang.reflect.Method move = null;
+                for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
+                    if ((m.getName().equals("moveRootTaskToDisplay")
+                            || m.getName().equals("moveTaskToDisplay"))
+                            && m.getParameterCount() == 2
+                            && m.getParameterTypes()[0] == int.class
+                            && m.getParameterTypes()[1] == int.class) {
+                        if (move == null || m.getName().equals("moveRootTaskToDisplay")) move = m;
+                    }
+                }
+                if (move != null) {
+                    move.setAccessible(true);
+                    move.invoke(iatm, taskId, displayId);
+                    sb.append(move.getName()).append("(taskId=").append(taskId)
+                      .append(", ").append(displayId).append(") OK\n");
+                    moved = true;
+                }
+            }
+
+            if (!moved) {
+                // Diagnostic dump: log all IATM method names so we can identify the right one
+                StringBuilder methodDump = new StringBuilder();
+                for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
+                    String n = m.getName().toLowerCase(java.util.Locale.US);
+                    if (n.contains("move") || n.contains("stack") || n.contains("display")) {
+                        methodDump.append(m.getName())
+                                  .append("(").append(m.getParameterCount()).append(") ");
+                    }
+                }
+                sb.append("WARNING: move method not found on ").append(iatmCls.getName())
+                  .append("\n  available[move/stack/display]: ").append(methodDump).append("\n");
             }
 
             // Step 4c — setTaskBounds to fit the VD exactly (mirrors OpenBYD d2.java)
