@@ -788,6 +788,163 @@ public final class MirrorDaemon {
             } catch (Exception ignored) {}
 
             log("LAUNCH_AND_FORCE pkg=" + pkg + " → display " + displayId + " taskId=" + taskId);
+
+            // Step 6 — Watchdog: BYD ROM / Waze's FreeMapAppActivity.launchToSide() forces
+            // the entire task back to display 0 (~2.5s after launch) by calling startActivity
+            // with setLaunchDisplayId(0). FreeMapAppActivity then self-destructs (~T+2.8s).
+            // Strategy: poll every 500ms; once we detect task on display 0 after T=3s,
+            // re-apply FREEFORM + move + FREEFORM + setFocusedTask — at that point only
+            // MainActivity is running and it does NOT redirect to display 0.
+            {
+                final int wTaskId   = taskId;
+                final int wDispId   = displayId;
+                final Object wIatm  = iatm;
+                final Class<?> wCls = iatmCls;
+                new Thread(() -> {
+                    try {
+                        for (int iter = 0; iter < 20; iter++) {
+                            Thread.sleep(500);
+                            if (sVirtualDisplay == null) {
+                                log("WATCHDOG: VD released, aborting");
+                                return;
+                            }
+                            // Only start checking after 3 s (iter 6+)
+                            if (iter < 6) continue;
+
+                            // Find current display/stack of wTaskId
+                            int curDisplay = -1;
+                            int curStack   = -1;
+                            try {
+                                java.lang.reflect.Method gas = null;
+                                for (java.lang.reflect.Method m : getAllMethods(wCls)) {
+                                    if (m.getName().equals("getAllStackInfos")
+                                            && m.getParameterCount() == 0) {
+                                        gas = m; break;
+                                    }
+                                }
+                                if (gas != null) {
+                                    gas.setAccessible(true);
+                                    java.util.List<?> ss = (java.util.List<?>) gas.invoke(wIatm);
+                                    if (ss != null) {
+                                        outer:
+                                        for (Object si : ss) {
+                                            int[] ids = (int[]) si.getClass().getField("taskIds").get(si);
+                                            if (ids == null) continue;
+                                            for (int tid : ids) {
+                                                if (tid == wTaskId) {
+                                                    curDisplay = si.getClass().getField("displayId").getInt(si);
+                                                    curStack   = si.getClass().getField("stackId").getInt(si);
+                                                    break outer;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            } catch (Exception ex) {
+                                log("WATCHDOG iter=" + iter + " poll error: " + ex.getMessage());
+                                continue;
+                            }
+
+                            log("WATCHDOG iter=" + iter + ": task=" + wTaskId
+                                    + " display=" + curDisplay + " stack=" + curStack);
+
+                            if (curDisplay < 0) {
+                                log("WATCHDOG: task gone, stopping");
+                                return;
+                            }
+                            if (curDisplay == wDispId) continue; // still on target
+
+                            // Task not on target display — re-apply
+                            log("WATCHDOG: task on display " + curDisplay
+                                    + ", re-moving to " + wDispId);
+
+                            // a) FREEFORM pre-move
+                            try {
+                                try {
+                                    java.lang.reflect.Method mf = wCls.getMethod(
+                                            "setTaskWindowingMode", int.class, int.class, boolean.class);
+                                    mf.setAccessible(true); mf.invoke(wIatm, wTaskId, 5, true);
+                                } catch (NoSuchMethodException e1) {
+                                    java.lang.reflect.Method mf = wCls.getMethod(
+                                            "setTaskWindowingMode", int.class, int.class);
+                                    mf.setAccessible(true); mf.invoke(wIatm, wTaskId, 5);
+                                }
+                                log("WATCHDOG: pre-FREEFORM OK");
+                            } catch (Exception ex) {
+                                log("WATCHDOG: pre-FREEFORM failed: " + ex.getMessage());
+                            }
+
+                            // b) Move: prefer moveTaskToDisplay, fallback to moveStackToDisplay
+                            boolean moved2 = false;
+                            for (java.lang.reflect.Method m : getAllMethods(wCls)) {
+                                if ((m.getName().equals("moveTaskToDisplay")
+                                        || m.getName().equals("moveRootTaskToDisplay"))
+                                        && m.getParameterCount() == 2
+                                        && m.getParameterTypes()[0] == int.class
+                                        && m.getParameterTypes()[1] == int.class) {
+                                    m.setAccessible(true);
+                                    m.invoke(wIatm, wTaskId, wDispId);
+                                    log("WATCHDOG: " + m.getName() + "(" + wTaskId + "," + wDispId + ") OK");
+                                    moved2 = true;
+                                    break;
+                                }
+                            }
+                            if (!moved2 && curStack >= 0) {
+                                for (java.lang.reflect.Method m : getAllMethods(wCls)) {
+                                    if (m.getName().equals("moveStackToDisplay")
+                                            && m.getParameterCount() == 2
+                                            && m.getParameterTypes()[0] == int.class
+                                            && m.getParameterTypes()[1] == int.class) {
+                                        m.setAccessible(true);
+                                        m.invoke(wIatm, curStack, wDispId);
+                                        log("WATCHDOG: moveStackToDisplay(" + curStack + "," + wDispId + ") OK");
+                                        moved2 = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!moved2) {
+                                log("WATCHDOG: no move API found");
+                                return;
+                            }
+
+                            // c) FREEFORM post-move
+                            try {
+                                try {
+                                    java.lang.reflect.Method mf = wCls.getMethod(
+                                            "setTaskWindowingMode", int.class, int.class, boolean.class);
+                                    mf.setAccessible(true); mf.invoke(wIatm, wTaskId, 5, true);
+                                } catch (NoSuchMethodException e1) {
+                                    java.lang.reflect.Method mf = wCls.getMethod(
+                                            "setTaskWindowingMode", int.class, int.class);
+                                    mf.setAccessible(true); mf.invoke(wIatm, wTaskId, 5);
+                                }
+                                log("WATCHDOG: post-FREEFORM OK");
+                            } catch (Exception ex) {
+                                log("WATCHDOG: post-FREEFORM failed: " + ex.getMessage());
+                            }
+
+                            // d) setFocusedTask
+                            try {
+                                java.lang.reflect.Method sf = wCls.getMethod("setFocusedTask", int.class);
+                                sf.setAccessible(true); sf.invoke(wIatm, wTaskId);
+                                log("WATCHDOG: setFocusedTask OK");
+                            } catch (Exception ex) {
+                                log("WATCHDOG: setFocusedTask failed: " + ex.getMessage());
+                            }
+
+                            log("WATCHDOG: re-move done");
+                            return; // one retry is enough
+                        }
+                        log("WATCHDOG: poll loop ended without re-move");
+                    } catch (InterruptedException ie) {
+                        log("WATCHDOG: interrupted");
+                    } catch (Exception ex) {
+                        log("WATCHDOG: unexpected error: " + ex.getMessage());
+                    }
+                }, "waze-display-watchdog").start();
+            }
+
             reply.writeNoException();
             reply.writeString("OK taskId=" + taskId + "\n" + sb);
 
