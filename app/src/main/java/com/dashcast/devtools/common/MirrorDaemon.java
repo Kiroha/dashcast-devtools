@@ -1105,15 +1105,14 @@ public final class MirrorDaemon {
 
             Runnable attach = () -> {
                 try {
-                    // createPackageContext("com.android.shell") in systemMain() mode has
-                    // no app resources loaded — new SurfaceView(sContext) throws NPE on
-                    // getResources(). Use sSysContext (the raw ActivityThread.getSystemContext)
-                    // which HAS framework resources. Route to the cluster display via
-                    // WindowManagerGlobal.addView(view, params, display, null) — the exact
-                    // internal path that WindowManagerImpl.addView delegates to; the Display
-                    // parameter is what routes the window to the right physical display.
-                    Context viewCtx = (sSysContext != null) ? sSysContext : sContext;
-                    SurfaceView surfaceView = new SurfaceView(viewCtx);
+                    // createDisplayContext(targetDisplay) returns a Context bound to the
+                    // cluster display with valid resources — avoids NPE on getResources()
+                    // that occurs with raw sContext (shell package context, no app resources).
+                    // getSystemService(WindowManager) on that context routes addView() directly
+                    // to the target display without any reflection on WindowManagerGlobal.
+                    Context baseCtx = (sSysContext != null) ? sSysContext : sContext;
+                    Context displayCtx = baseCtx.createDisplayContext(targetDisplay);
+                    SurfaceView surfaceView = new SurfaceView(displayCtx);
                     SurfaceHolder holder = surfaceView.getHolder();
                     holder.setFixedSize(w, h);
                     holder.addCallback(new SurfaceHolder.Callback() {
@@ -1142,20 +1141,12 @@ public final class MirrorDaemon {
 
                     WindowManager.LayoutParams lp = createOverlayLayoutParams(targetDisplay, w, h);
 
-                    // WindowManagerGlobal.getInstance().addView(view, params, display, parentWindow)
-                    // routes to the correct display without needing a display-specific Context.
-                    Class<?> wmgCls = Class.forName("android.view.WindowManagerGlobal");
-                    Object wmg = wmgCls.getMethod("getInstance").invoke(null);
-                    java.lang.reflect.Method wmgAdd = wmgCls.getDeclaredMethod("addView",
-                            View.class, android.view.ViewGroup.LayoutParams.class,
-                            Display.class, android.view.Window.class);
-                    wmgAdd.setAccessible(true);
-                    wmgAdd.invoke(wmg, surfaceView, lp, targetDisplay, null);
+                    // Use the display-bound WindowManager — routes the view to the cluster
+                    // display without reflection (same as OpenBYD's approach).
+                    WindowManager wm = displayCtx.getSystemService(WindowManager.class);
+                    wm.addView(surfaceView, lp);
 
-                    // Store a WindowManager from sContext for removeView — WindowManagerImpl
-                    // delegates to WindowManagerGlobal which tracks views by reference, so
-                    // display ownership doesn't matter for removal.
-                    sClusterOverlayWindowManager = sContext.getSystemService(WindowManager.class);
+                    sClusterOverlayWindowManager = wm;
                     sClusterOverlayView = surfaceView;
                     log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
                 } catch (Exception e) {
@@ -1208,6 +1199,8 @@ public final class MirrorDaemon {
             overlayType = WindowManager.LayoutParams.TYPE_PHONE;
         }
 
+        // Match OpenBYD: MATCH_PARENT dimensions — the display-bound WindowManager
+        // already knows the display size, so explicit pixel dimensions are not needed.
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
@@ -1215,22 +1208,8 @@ public final class MirrorDaemon {
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
                 android.graphics.PixelFormat.TRANSLUCENT);
-        lp.setTitle("devtools_cluster_overlay");
-        lp.x = 0;
-        lp.y = 0;
-        lp.width = w;
-        lp.height = h;
-        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
-        DisplayMetrics metrics = new DisplayMetrics();
-        targetDisplay.getRealMetrics(metrics);
-        lp.format = android.graphics.PixelFormat.TRANSLUCENT;
-        lp.packageName = sContext.getPackageName();
-        lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
-        lp.verticalMargin = 0f;
-        lp.horizontalMargin = 0f;
         log("CLUSTER_ATTACH overlay params type=" + overlayType
-                + " targetDisplay=" + targetDisplay.getDisplayId()
-                + " metrics=" + metrics.widthPixels + "x" + metrics.heightPixels);
+                + " targetDisplay=" + targetDisplay.getDisplayId());
         return lp;
     }
 
