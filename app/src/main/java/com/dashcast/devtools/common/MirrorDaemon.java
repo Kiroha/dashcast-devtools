@@ -1091,13 +1091,16 @@ public final class MirrorDaemon {
         }
 
         try {
+            log("CLUSTER_ATTACH overlay step1: releaseClusterOverlay");
             releaseClusterOverlay();
 
+            log("CLUSTER_ATTACH overlay step2: resolveClusterDisplay hint=" + displayIdHint);
             Display targetDisplay = resolveClusterDisplay(displayIdHint);
             if (targetDisplay == null) {
                 log("CLUSTER_ATTACH overlay skipped: no display for hint=" + displayIdHint);
                 return null;
             }
+            log("CLUSTER_ATTACH overlay step3: targetDisplay=" + targetDisplay.getDisplayId() + " latch setup");
 
             CountDownLatch latch = new CountDownLatch(1);
             AtomicReference<Surface> surfaceRef = new AtomicReference<>();
@@ -1105,6 +1108,9 @@ public final class MirrorDaemon {
 
             Runnable attach = () -> {
                 try {
+                    log("CLUSTER_ATTACH overlay Runnable: start sSysContext="
+                            + (sSysContext != null ? "non-null" : "null")
+                            + " sContext=" + (sContext != null ? "non-null" : "null"));
                     // createDisplayContext(targetDisplay) returns a Context bound to the
                     // cluster display with valid resources — avoids NPE on getResources()
                     // that occurs with raw sContext (shell package context, no app resources).
@@ -1155,12 +1161,16 @@ public final class MirrorDaemon {
                 }
             };
 
+            log("CLUSTER_ATTACH overlay step4: posting Runnable to Looper myLooper="
+                    + (Looper.myLooper() != null ? "non-null" : "null")
+                    + " mainLooper=" + (Looper.getMainLooper() != null ? "non-null" : "null"));
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 attach.run();
             } else {
                 new android.os.Handler(Looper.getMainLooper()).post(attach);
             }
 
+            log("CLUSTER_ATTACH overlay step5: awaiting latch");
             if (!latch.await(2, TimeUnit.SECONDS)) {
                 log("CLUSTER_ATTACH overlay timed out waiting for surface");
                 releaseClusterOverlay();
