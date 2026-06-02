@@ -863,16 +863,14 @@ public final class MirrorDaemon {
 
             Runnable attach = () -> {
                 try {
-                    Context displayContext = sContext.createDisplayContext(targetDisplay);
-                    if (displayContext == null) {
-                        throw new RuntimeException("createDisplayContext returned null");
-                    }
-                    WindowManager windowManager = displayContext.getSystemService(WindowManager.class);
-                    if (windowManager == null) {
-                        throw new RuntimeException("window manager unavailable");
-                    }
-
-                    SurfaceView surfaceView = new SurfaceView(displayContext);
+                    // On this ROM, sContext.createDisplayContext() returns a ContextWrapper
+                    // with mBase=null — any delegating call (getResources, getSystemService…)
+                    // throws NPE. Fix: use sContext directly for View construction (valid
+                    // resources), and route to the cluster display via WindowManagerGlobal
+                    // .addView(view, params, display, parentWindow) — the exact internal
+                    // path that WindowManagerImpl.addView delegates to. The Display parameter
+                    // is what routes the window to the right physical display.
+                    SurfaceView surfaceView = new SurfaceView(sContext);
                     SurfaceHolder holder = surfaceView.getHolder();
                     holder.setFixedSize(w, h);
                     holder.addCallback(new SurfaceHolder.Callback() {
@@ -899,10 +897,22 @@ public final class MirrorDaemon {
                         }
                     });
 
-                    WindowManager.LayoutParams lp = createOverlayLayoutParams(displayContext, targetDisplay, w, h);
-                    windowManager.addView(surfaceView, lp);
+                    WindowManager.LayoutParams lp = createOverlayLayoutParams(targetDisplay, w, h);
 
-                    sClusterOverlayWindowManager = windowManager;
+                    // WindowManagerGlobal.getInstance().addView(view, params, display, parentWindow)
+                    // routes to the correct display without needing a display-specific Context.
+                    Class<?> wmgCls = Class.forName("android.view.WindowManagerGlobal");
+                    Object wmg = wmgCls.getMethod("getInstance").invoke(null);
+                    java.lang.reflect.Method wmgAdd = wmgCls.getDeclaredMethod("addView",
+                            View.class, android.view.ViewGroup.LayoutParams.class,
+                            Display.class, android.view.Window.class);
+                    wmgAdd.setAccessible(true);
+                    wmgAdd.invoke(wmg, surfaceView, lp, targetDisplay, null);
+
+                    // Store a WindowManager from sContext for removeView — WindowManagerImpl
+                    // delegates to WindowManagerGlobal which tracks views by reference, so
+                    // display ownership doesn't matter for removal.
+                    sClusterOverlayWindowManager = sContext.getSystemService(WindowManager.class);
                     sClusterOverlayView = surfaceView;
                     log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
                 } catch (Exception e) {
@@ -947,7 +957,7 @@ public final class MirrorDaemon {
     }
 
     private static WindowManager.LayoutParams createOverlayLayoutParams(
-            Context displayContext, Display targetDisplay, int w, int h) {
+            Display targetDisplay, int w, int h) {
         int overlayType;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             overlayType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
@@ -971,7 +981,7 @@ public final class MirrorDaemon {
         DisplayMetrics metrics = new DisplayMetrics();
         targetDisplay.getRealMetrics(metrics);
         lp.format = android.graphics.PixelFormat.TRANSLUCENT;
-        lp.packageName = displayContext.getPackageName();
+        lp.packageName = sContext.getPackageName();
         lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE;
         lp.verticalMargin = 0f;
         lp.horizontalMargin = 0f;
