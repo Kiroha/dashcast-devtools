@@ -1111,14 +1111,51 @@ public final class MirrorDaemon {
                     log("CLUSTER_ATTACH overlay Runnable: start sSysContext="
                             + (sSysContext != null ? "non-null" : "null")
                             + " sContext=" + (sContext != null ? "non-null" : "null"));
-                    // createDisplayContext(targetDisplay) returns a Context bound to the
-                    // cluster display with valid resources — avoids NPE on getResources()
-                    // that occurs with raw sContext (shell package context, no app resources).
-                    // getSystemService(WindowManager) on that context routes addView() directly
-                    // to the target display without any reflection on WindowManagerGlobal.
-                    Context baseCtx = (sSysContext != null) ? sSysContext : sContext;
-                    Context displayCtx = baseCtx.createDisplayContext(targetDisplay);
-                    SurfaceView surfaceView = new SurfaceView(displayCtx);
+
+                    // ── Step A: build a display-scoped context ───────────────────────────
+                    // createDisplayContext() gives a ContextImpl configured with the cluster
+                    // display's metrics. On BYD's ROM, however, it may return a context
+                    // whose Resources are null for displayId=2 (the non-default cluster
+                    // display). We verify before using it; fall back to the base context
+                    // (which has framework Resources) for SurfaceView construction.
+                    Context base = (sSysContext != null) ? sSysContext : sContext;
+                    Context displayCtx = null;
+                    try {
+                        displayCtx = base.createDisplayContext(targetDisplay);
+                    } catch (Exception e) {
+                        log("CLUSTER_ATTACH overlay: createDisplayContext threw: " + e.getMessage());
+                    }
+                    boolean displayCtxHasResources = displayCtx != null
+                            && displayCtx.getResources() != null;
+                    // viewCtx must have non-null Resources for View construction.
+                    Context viewCtx = displayCtxHasResources ? displayCtx : base;
+                    log("CLUSTER_ATTACH overlay: displayCtx=" + (displayCtx != null ? "ok" : "null")
+                            + " resources=" + (displayCtxHasResources ? "ok" : "null/missing")
+                            + " → viewCtx=" + viewCtx.getClass().getSimpleName());
+
+                    // ── Step B: grant OP_SYSTEM_ALERT_WINDOW via AppOps ─────────────────
+                    // TYPE_APPLICATION_OVERLAY requires SYSTEM_ALERT_WINDOW. shell uid=2000
+                    // does not declare it in its manifest, but AppOpsManager.setMode() is
+                    // callable by privileged processes on most ROMs including BYD's.
+                    // We try it unconditionally and swallow any SecurityException — the
+                    // worst case is that addView() throws BadTokenException (caught below).
+                    try {
+                        Object appOps = sContext.getSystemService(Context.APP_OPS_SERVICE);
+                        // OP_SYSTEM_ALERT_WINDOW = 24, MODE_ALLOWED = 0
+                        Method setMode = appOps.getClass().getMethod(
+                                "setMode", int.class, int.class, String.class, int.class);
+                        setMode.setAccessible(true);
+                        setMode.invoke(appOps, 24,
+                                android.os.Process.myUid(), sContext.getPackageName(), 0);
+                        log("CLUSTER_ATTACH overlay: OP_SYSTEM_ALERT_WINDOW → MODE_ALLOWED");
+                    } catch (Exception appOpsEx) {
+                        log("CLUSTER_ATTACH overlay: AppOps grant skipped ("
+                                + appOpsEx.getClass().getSimpleName() + ": "
+                                + appOpsEx.getMessage() + ")");
+                    }
+
+                    // ── Step C: create SurfaceView and attach surface callback ───────────
+                    SurfaceView surfaceView = new SurfaceView(viewCtx);
                     SurfaceHolder holder = surfaceView.getHolder();
                     holder.setFixedSize(w, h);
                     holder.addCallback(new SurfaceHolder.Callback() {
@@ -1145,14 +1182,31 @@ public final class MirrorDaemon {
                         }
                     });
 
+                    // ── Step D: add view to the cluster display via WindowManager ────────
+                    // Prefer the display-scoped WindowManager (standard API 29 path: the
+                    // WindowManagerImpl bound to displayCtx routes addView to targetDisplay).
+                    // If displayCtx is unavailable, fall back to WindowManagerGlobal
+                    // reflection which accepts an explicit Display parameter.
                     WindowManager.LayoutParams lp = createOverlayLayoutParams(targetDisplay, w, h);
-
-                    // Use the display-bound WindowManager — routes the view to the cluster
-                    // display without reflection (same as OpenBYD's approach).
-                    WindowManager wm = displayCtx.getSystemService(WindowManager.class);
-                    wm.addView(surfaceView, lp);
-
-                    sClusterOverlayWindowManager = wm;
+                    WindowManager wm = (displayCtx != null)
+                            ? displayCtx.getSystemService(WindowManager.class) : null;
+                    if (wm != null) {
+                        log("CLUSTER_ATTACH overlay: addView via display-scoped WM");
+                        wm.addView(surfaceView, lp);
+                        sClusterOverlayWindowManager = wm;
+                    } else {
+                        // WindowManagerGlobal.addView(view, params, display, parentWindow)
+                        // is the @hide API that WindowManagerImpl.addView() delegates to.
+                        log("CLUSTER_ATTACH overlay: addView via WindowManagerGlobal (wm was null)");
+                        Class<?> wmgCls = Class.forName("android.view.WindowManagerGlobal");
+                        Object wmg = wmgCls.getMethod("getInstance").invoke(null);
+                        Method wmgAdd = wmgCls.getDeclaredMethod("addView",
+                                View.class, android.view.ViewGroup.LayoutParams.class,
+                                Display.class, android.view.Window.class);
+                        wmgAdd.setAccessible(true);
+                        wmgAdd.invoke(wmg, surfaceView, lp, targetDisplay, null);
+                        sClusterOverlayWindowManager = sContext.getSystemService(WindowManager.class);
+                    }
                     sClusterOverlayView = surfaceView;
                     log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
                 } catch (Exception e) {
@@ -1180,6 +1234,11 @@ public final class MirrorDaemon {
             RuntimeException error = errorRef.get();
             if (error != null) {
                 Throwable cause = error.getCause() != null ? error.getCause() : error;
+                // Unwrap InvocationTargetException from reflection calls to surface the real cause.
+                if (cause instanceof java.lang.reflect.InvocationTargetException
+                        && cause.getCause() != null) {
+                    cause = cause.getCause();
+                }
                 log("CLUSTER_ATTACH overlay ERROR: " + cause.getClass().getSimpleName()
                         + ": " + cause.getMessage());
                 releaseClusterOverlay();
@@ -1202,23 +1261,26 @@ public final class MirrorDaemon {
 
     private static WindowManager.LayoutParams createOverlayLayoutParams(
             Display targetDisplay, int w, int h) {
-        int overlayType;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            overlayType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-        } else {
-            overlayType = WindowManager.LayoutParams.TYPE_PHONE;
-        }
+        // TYPE_APPLICATION_OVERLAY (API 26+) is the correct type for a persistent
+        // system-managed overlay; TYPE_PHONE is the legacy equivalent on API < 26.
+        int overlayType = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;
 
-        // Match OpenBYD: MATCH_PARENT dimensions — the display-bound WindowManager
-        // already knows the display size, so explicit pixel dimensions are not needed.
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT,
+                w, h,
                 overlayType,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-                android.graphics.PixelFormat.TRANSLUCENT);
+                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                        | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                android.graphics.PixelFormat.OPAQUE);
+        lp.setTitle("devtools_cluster_overlay");
+        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
+        lp.x = 0;
+        lp.y = 0;
         log("CLUSTER_ATTACH overlay params type=" + overlayType
+                + " size=" + w + "×" + h
                 + " targetDisplay=" + targetDisplay.getDisplayId());
         return lp;
     }
