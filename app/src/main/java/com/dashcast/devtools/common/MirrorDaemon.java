@@ -156,6 +156,10 @@ public final class MirrorDaemon {
     // Obtained via ActivityThread.currentActivityThread() + createPackageContext("com.android.shell", 0).
     // Shell uid=2000 owns "com.android.shell" → validatePackageName() passes.
     private static volatile Context        sContext       = null;
+    // Raw system context (ActivityThread.getSystemContext()) — has framework Resources loaded,
+    // unlike sContext (createPackageContext in systemMain mode has no app resources).
+    // Used exclusively where View construction requires a valid getResources() call.
+    private static volatile Context        sSysContext    = null;
     /** Active VirtualDisplay — created by TRANSACT_CREATE_VD, released by MIRROR_STOP. */
     private static volatile VirtualDisplay sVirtualDisplay = null;
 
@@ -408,6 +412,7 @@ public final class MirrorDaemon {
 
             // Flag 0 — identical to OpenBYD. uid=2000 owns com.android.shell so
             // validatePackageName() passes without needing CONTEXT_IGNORE_SECURITY.
+            sSysContext = sysCtx;
             sContext = sysCtx.createPackageContext("com.android.shell", 0);
             log("Context init OK pkg=" + sContext.getPackageName()
                     + " uid=" + android.os.Process.myUid());
@@ -417,21 +422,18 @@ public final class MirrorDaemon {
     }
 
     /**
-     * TRANSACT_CREATE_VD — creates a FLAG_TRUSTED VirtualDisplay via the standard
+     * TRANSACT_CREATE_VD — creates a VirtualDisplay via the standard
      * {@link DisplayManager#createVirtualDisplay} API (OpenBYD approach).
      *
      * <p>Uses {@link #sContext} (a package context for {@code com.android.shell}, obtained
      * in {@link #initContext()}). The process runs as uid=2000 which owns
      * {@code com.android.shell}, so {@code DisplayManagerService.validatePackageName()} passes.
      *
-     * <p>Flags = 322 (0x142) — identical to OpenBYD 2.1 :
-     * {@code FLAG_PRESENTATION (0x02) | FLAG_SUPPORTS_TOUCH (0x40) | FLAG_DESTROY_CONTENT_ON_REMOVAL (0x100)}.
-     * FLAG_TRUSTED (0x200) is NOT used by OpenBYD and not needed here: the Waze secondary-screen
-     * rejection is bypassed by launching on display 0 then calling moveRootTaskToDisplay(), not
-     * by a trusted flag on the display.
-     * Note: FLAG_PRESENTATION was previously avoided (v0.6.17) because am-start-on-display
-     * caused an immediate topResumedLost. With launchAndForce the task arrives already alive,
-     * so this issue no longer applies.
+     * <p>Tries flags=1346 (322|1024) first: adds {@code VIRTUAL_DISPLAY_FLAG_TRUSTED} (0x400)
+     * so that {@code DisplayContent.canAddActivity()} returns true for ALL activities, including
+     * non-resizable ones (e.g. {@code com.waze/.MainActivity}). Requires
+     * {@code CREATE_TRUSTED_VIRTUAL_DISPLAY} permission; falls back to flags=322 if denied.
+     * Flags base 322 = PRESENTATION(0x02) | SUPPORTS_TOUCH(0x40) | DESTROY_CONTENT_ON_REMOVAL(0x100).
      *
      * <p>Wire format: writeInterfaceToken + writeInt(w) + writeInt(h) + writeInt(dpi)
      * <p>Reply: writeNoException() + writeInt(displayId) or -1 on failure.
@@ -458,13 +460,30 @@ public final class MirrorDaemon {
             }
 
             DisplayManager dm = sContext.getSystemService(DisplayManager.class);
-            // Flags = 322 (0x142) — identical to OpenBYD 2.1:
-            // FLAG_PRESENTATION (0x02) | FLAG_SUPPORTS_TOUCH (0x40) | FLAG_DESTROY_CONTENT_ON_REMOVAL (0x100)
-            VirtualDisplay vd = dm.createVirtualDisplay(
-                    "devtools_projection_vd",
-                    w, h, dpi,
-                    /*surface=*/ null,
-                    /*flags=*/   322 /* 0x142: PRESENTATION | SUPPORTS_TOUCH | DESTROY_CONTENT_ON_REMOVAL */);
+            // Try flags = 1346 (322 | 1024) = PRESENTATION | SUPPORTS_TOUCH | DESTROY_CONTENT_ON_REMOVAL | TRUSTED.
+            // VIRTUAL_DISPLAY_FLAG_TRUSTED (1024) makes canPlaceEntityOnDisplay() return true for
+            // ALL activities, including non-resizable ones (e.g. com.waze/.MainActivity). On some
+            // Android 10 ROMs this requires CREATE_TRUSTED_VIRTUAL_DISPLAY permission; if the
+            // daemon lacks it, DisplayManagerService silently strips the flag or throws — we fall
+            // back to flags=322 in that case.
+            VirtualDisplay vd = null;
+            try {
+                vd = dm.createVirtualDisplay(
+                        "devtools_projection_vd",
+                        w, h, dpi,
+                        /*surface=*/ null,
+                        /*flags=*/   1346 /* 322 | 1024: +TRUSTED */);
+                if (vd != null) log("CREATE_VD using TRUSTED flags=1346");
+            } catch (Exception eTrusted) {
+                log("CREATE_VD TRUSTED failed (" + eTrusted.getMessage() + "), fallback to 322");
+            }
+            if (vd == null) {
+                vd = dm.createVirtualDisplay(
+                        "devtools_projection_vd",
+                        w, h, dpi,
+                        /*surface=*/ null,
+                        /*flags=*/   322 /* PRESENTATION | SUPPORTS_TOUCH | DESTROY_CONTENT_ON_REMOVAL */);
+            }
 
             if (vd == null) throw new RuntimeException("createVirtualDisplay returned null");
 
@@ -603,6 +622,44 @@ public final class MirrorDaemon {
                 return true;
             }
 
+            // Step 3b — resolve the REAL stackId by querying getAllStackInfos().
+            // RunningTaskInfo.stackId can return the "preferred" stack, not the current one.
+            // getAllStackInfos() lists all stacks with their taskIds[] — use that to find
+            // the stack that actually contains our taskId.
+            try {
+                java.lang.reflect.Method getAllStacks = null;
+                for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
+                    if (m.getName().equals("getAllStackInfos") && m.getParameterCount() == 0) {
+                        getAllStacks = m; break;
+                    }
+                }
+                if (getAllStacks != null) {
+                    getAllStacks.setAccessible(true);
+                    java.util.List<?> stacks = (java.util.List<?>) getAllStacks.invoke(iatm);
+                    if (stacks != null) {
+                        for (Object si : stacks) {
+                            int[] taskIds = (int[]) si.getClass().getField("taskIds").get(si);
+                            if (taskIds != null) {
+                                for (int tid : taskIds) {
+                                    if (tid == taskId) {
+                                        int realStackId = si.getClass().getField("stackId").getInt(si);
+                                        sb.append("getAllStackInfos: taskId=").append(taskId)
+                                          .append(" is in stackId=").append(realStackId)
+                                          .append(" (was ").append(stackId).append(")\n");
+                                        stackId = realStackId;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    sb.append("getAllStackInfos not found — using RunningTaskInfo.stackId\n");
+                }
+            } catch (Exception e) {
+                sb.append("getAllStackInfos exception: ").append(e.getMessage()).append("\n");
+            }
+
             // Step 4a — setTaskWindowingMode(WINDOWING_MODE_FREEFORM=5) BEFORE the move.
             // Freeform tasks receive onConfigurationChanged instead of being relaunched
             // when moved between displays — this bypasses in-onCreate display checks
@@ -683,6 +740,34 @@ public final class MirrorDaemon {
                 }
                 sb.append("WARNING: move method not found on ").append(iatmCls.getName())
                   .append("\n  available[move/stack/display]: ").append(methodDump).append("\n");
+            }
+
+            // Step 4b.5 — Re-apply FREEFORM windowing mode AFTER the move.
+            // moveStackToDisplay() creates a new stack on the target display with a default
+            // FULLSCREEN windowing mode, which OVERRIDES the task's FREEFORM mode set in Step 4a.
+            // Android 10 canAddActivity() bypasses the non-resizable check when
+            // currentTask.inFreeformWindowingMode() is true — so we must re-apply FREEFORM
+            // on the task now that it lives in the new stack, BEFORE FreeMapAppActivity's
+            // onCreate() completes and calls startActivity(MainActivity).
+            // There is ~2 seconds of margin (see log: am_on_create_called appears 2s after move).
+            if (moved) {
+                try {
+                    java.lang.reflect.Method setWindowing2 = iatmCls.getMethod(
+                            "setTaskWindowingMode", int.class, int.class, boolean.class);
+                    setWindowing2.setAccessible(true);
+                    setWindowing2.invoke(iatm, taskId, 5 /* WINDOWING_MODE_FREEFORM */, true);
+                    sb.append("setTaskWindowingMode(FREEFORM) post-move OK\n");
+                } catch (NoSuchMethodException e1) {
+                    try {
+                        java.lang.reflect.Method setWindowing2 = iatmCls.getMethod(
+                                "setTaskWindowingMode", int.class, int.class);
+                        setWindowing2.setAccessible(true);
+                        setWindowing2.invoke(iatm, taskId, 5);
+                        sb.append("setTaskWindowingMode(FREEFORM) post-move 2-arg OK\n");
+                    } catch (Exception e2) {
+                        sb.append("setTaskWindowingMode post-move failed: ").append(e2.getMessage()).append("\n");
+                    }
+                }
             }
 
             // Step 4c — setTaskBounds to fit the VD exactly (mirrors OpenBYD d2.java)
@@ -863,14 +948,15 @@ public final class MirrorDaemon {
 
             Runnable attach = () -> {
                 try {
-                    // On this ROM, sContext.createDisplayContext() returns a ContextWrapper
-                    // with mBase=null — any delegating call (getResources, getSystemService…)
-                    // throws NPE. Fix: use sContext directly for View construction (valid
-                    // resources), and route to the cluster display via WindowManagerGlobal
-                    // .addView(view, params, display, parentWindow) — the exact internal
-                    // path that WindowManagerImpl.addView delegates to. The Display parameter
-                    // is what routes the window to the right physical display.
-                    SurfaceView surfaceView = new SurfaceView(sContext);
+                    // createPackageContext("com.android.shell") in systemMain() mode has
+                    // no app resources loaded — new SurfaceView(sContext) throws NPE on
+                    // getResources(). Use sSysContext (the raw ActivityThread.getSystemContext)
+                    // which HAS framework resources. Route to the cluster display via
+                    // WindowManagerGlobal.addView(view, params, display, null) — the exact
+                    // internal path that WindowManagerImpl.addView delegates to; the Display
+                    // parameter is what routes the window to the right physical display.
+                    Context viewCtx = (sSysContext != null) ? sSysContext : sContext;
+                    SurfaceView surfaceView = new SurfaceView(viewCtx);
                     SurfaceHolder holder = surfaceView.getHolder();
                     holder.setFixedSize(w, h);
                     holder.addCallback(new SurfaceHolder.Callback() {
