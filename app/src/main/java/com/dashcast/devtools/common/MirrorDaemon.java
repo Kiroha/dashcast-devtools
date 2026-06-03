@@ -307,7 +307,11 @@ public final class MirrorDaemon {
             sClusterSc = null;
         }
         releaseClusterOverlay();
-        // VirtualDisplay is owned and released by the caller — daemon does not touch it.
+        if (sVirtualDisplay != null) {
+            try { sVirtualDisplay.release(); log("VD released"); }
+            catch (Exception e) { log("VD release error: " + e.getMessage()); }
+            sVirtualDisplay = null;
+        }
         reply.writeNoException();
         return true;
     }
@@ -798,8 +802,8 @@ public final class MirrorDaemon {
                     try {
                         for (int iter = 0; iter < 20; iter++) {
                             Thread.sleep(500);
-                            if (sClusterSc == null) {
-                                log("WATCHDOG: cluster SC released (MIRROR_STOP), aborting");
+                            if (sVirtualDisplay == null) {
+                                log("WATCHDOG: VD released (MIRROR_STOP), aborting");
                                 return;
                             }
                             // Only start checking after 3 s (iter 6+)
@@ -954,12 +958,13 @@ public final class MirrorDaemon {
     }
 
     /**
-     * TRANSACT_CLUSTER_ATTACH — creates a SurfaceControl buffer layer on {@code layerStack}
-     * (=1 for the BYD cluster display) and returns its {@link Surface}.
+     * TRANSACT_CLUSTER_ATTACH — creates the cluster output surface AND a TRUSTED VirtualDisplay
+     * bound to that surface. Returns both the surface and the VD's display ID.
      *
-     * <p>The caller creates a {@link android.hardware.display.VirtualDisplay} <em>with this
-     * Surface passed at construction time</em> (OpenBYD 2.2 pattern, flags=322). The daemon
-     * does NOT create or manage the VirtualDisplay — that is entirely the caller's responsibility.
+     * <p>The daemon (shell uid=2000) holds {@code CREATE_TRUSTED_VIRTUAL_DISPLAY} permission;
+     * the caller (app process) does not. Without {@code FLAG_TRUSTED} (0x400), ActivityTaskManager
+     * rejects non-resizable activities (e.g. Waze) via {@code canPlaceEntityOnDisplay()}.
+     * Creating the VD here in the daemon is therefore mandatory for Waze projection.
      *
      * <p>Wire format (client side):
      * <pre>
@@ -968,8 +973,9 @@ public final class MirrorDaemon {
      *   writeInt(w)            — buffer width  (1920)
      *   writeInt(h)            — buffer height (720)
      * </pre>
-     * Reply: {@code writeNoException() + writeInt(1) + writeParcelable(Surface)} on success,
-     *        {@code writeNoException() + writeInt(0)} on failure.
+     * Reply on success: {@code writeNoException() + writeInt(1) + writeParcelable(Surface)
+     *                          + writeInt(displayId)}
+     * Reply on failure: {@code writeNoException() + writeInt(0)}
      */
     private static boolean handleClusterAttach(Parcel data, Parcel reply) {
         data.enforceInterface(DESCRIPTOR);
@@ -978,14 +984,21 @@ public final class MirrorDaemon {
         int h          = data.readInt();
         log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h);
 
-        // VirtualDisplay is created by the caller with this Surface at construction time
-        // (OpenBYD 2.2 pattern). The daemon does not call setSurface — the caller owns the VD.
+        // Try the SurfaceView overlay first; fall back to the SurfaceControl buffer layer.
+        // Whichever succeeds, immediately create a TRUSTED VirtualDisplay bound to that surface.
+        // The daemon (shell uid=2000) holds CREATE_TRUSTED_VIRTUAL_DISPLAY; the caller does not.
         Surface overlaySurface = tryAttachClusterOverlay(layerStack, w, h);
         if (overlaySurface != null) {
-            reply.writeNoException();
-            reply.writeInt(1);
-            reply.writeParcelable(overlaySurface, 0);
-            return true;
+            int displayId = createAndStoreTrustedVd(overlaySurface, w, h);
+            if (displayId >= 0) {
+                reply.writeNoException();
+                reply.writeInt(1);
+                reply.writeParcelable(overlaySurface, 0);
+                reply.writeInt(displayId);
+                return true;
+            }
+            // VD creation failed — fall through to SurfaceControl path
+            releaseClusterOverlay();
         }
 
         try {
@@ -1053,11 +1066,19 @@ public final class MirrorDaemon {
 
             sClusterSc = sc;
             log("CLUSTER_ATTACH OK sc=" + sc + " surface.valid=" + outputSurface.isValid());
-            // Caller creates VirtualDisplay with this surface at construction time — no setSurface.
+
+            int displayId = createAndStoreTrustedVd(outputSurface, w, h);
+            if (displayId < 0) {
+                log("CLUSTER_ATTACH: VD creation failed after SC surface");
+                reply.writeNoException();
+                reply.writeInt(0);
+                return true;
+            }
 
             reply.writeNoException();
             reply.writeInt(1);
             reply.writeParcelable(outputSurface, 0);
+            reply.writeInt(displayId);
 
         } catch (Exception e) {
             log("CLUSTER_ATTACH ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
@@ -1065,6 +1086,39 @@ public final class MirrorDaemon {
             reply.writeInt(0);
         }
         return true;
+    }
+
+    /**
+     * Creates a TRUSTED VirtualDisplay bound to {@code surface} and stores it in
+     * {@link #sVirtualDisplay}. Returns the display ID on success, -1 on failure.
+     * Tries flags=1346 (322|TRUSTED) first; falls back to 322 if the ROM denies TRUSTED.
+     */
+    private static int createAndStoreTrustedVd(Surface surface, int w, int h) {
+        try {
+            if (sVirtualDisplay != null) {
+                try { sVirtualDisplay.release(); } catch (Exception ignored) {}
+                sVirtualDisplay = null;
+            }
+            DisplayManager dm = sContext.getSystemService(DisplayManager.class);
+            VirtualDisplay vd = null;
+            try {
+                vd = dm.createVirtualDisplay("devtools_projection_vd", w, h, 160, surface, 1346);
+                if (vd != null) log("CLUSTER_ATTACH: VD TRUSTED flags=1346 OK");
+            } catch (Exception eTrusted) {
+                log("CLUSTER_ATTACH: VD TRUSTED failed (" + eTrusted.getMessage() + "), fallback 322");
+            }
+            if (vd == null) {
+                vd = dm.createVirtualDisplay("devtools_projection_vd", w, h, 160, surface, 322);
+            }
+            if (vd == null) throw new RuntimeException("createVirtualDisplay returned null");
+            sVirtualDisplay = vd;
+            int displayId = vd.getDisplay().getDisplayId();
+            log("CLUSTER_ATTACH: VD displayId=" + displayId);
+            return displayId;
+        } catch (Exception e) {
+            log("CLUSTER_ATTACH: VD ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            return -1;
+        }
     }
 
     private static Surface tryAttachClusterOverlay(int displayIdHint, int w, int h) {

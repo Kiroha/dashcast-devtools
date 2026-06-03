@@ -124,9 +124,10 @@ public final class Dl3FissionRunner {
                 "Daemon crée SurfaceControl layer layerStack=1 → retourne Surface."
                 + " Le client créera le VD avec cette Surface (OpenBYD 2.2 pattern)."));
         list.add(new TestDef("F03",
-                "Créer VirtualDisplay avec Surface cluster (OpenBYD 2.2)",
-                "createVirtualDisplay(\"byd_test_vd\", 1920×720, dpi=160, surface=clusterSC,"
-                + " flags=322) → displayId + layerStack. Surface passée à la construction."));
+                "Vérifier VirtualDisplay créé par le daemon",
+                "Lit le displayId retourné par F06 (CLUSTER_ATTACH). Le daemon a déjà créé"
+                + " le VD TRUSTED — on vérifie juste que le display est visible et on récupère"
+                + " son layerStack."));
         list.add(new TestDef("F07",
                 "Lancer app sur VD",
                 "am start --display <vdId> -n <component> 2>&1 → pas d'erreur am."));
@@ -287,59 +288,27 @@ public final class Dl3FissionRunner {
         r.message = count + " displays : " + sb.toString().trim();
     }
 
-    // ── F03 — Créer VirtualDisplay avec la Surface cluster (OpenBYD 2.2) ────────
+    // ── F03 — Vérifier le VirtualDisplay TRUSTED créé par le daemon ──────────────
 
     private static void runF03(Context ctx, TestResult r, State st) {
         if (st.abortFromHere) { skip(r, "aborted"); return; }
-        if (st.clusterOutputSurface == null || !st.clusterOutputSurface.isValid()) {
+        if (st.vdDisplayId < 0) {
             r.status  = Status.FAIL;
-            r.message = "clusterOutputSurface null/invalide (F06 échoué)";
+            r.message = "displayId invalide (F06 échoué ou daemon n'a pas retourné displayId)";
             st.abortFromHere = true;
             return;
         }
-        try {
-            DisplayManager dm = (DisplayManager) ctx.getSystemService(Context.DISPLAY_SERVICE);
-            if (dm == null) {
-                r.status  = Status.FAIL;
-                r.message = "DisplayManager unavailable";
-                st.abortFromHere = true;
-                return;
-            }
-            // flags=322 = PRESENTATION(2)|SUPPORTS_TOUCH(0x40)|DESTROY_CONTENT_ON_REMOVAL(0x100)
-            // Surface passée à la construction — VD rend directement dans le SC layer cluster.
-            st.vd = dm.createVirtualDisplay(
-                    "byd_test_vd", 1920, 720, /*dpi=*/ 160,
-                    st.clusterOutputSurface, /*flags=*/ 322);
-
-            if (st.vd == null) {
-                r.status  = Status.FAIL;
-                r.message = "createVirtualDisplay() → null";
-                st.abortFromHere = true;
-                return;
-            }
-            Display d = st.vd.getDisplay();
-            if (d == null) {
-                r.status  = Status.FAIL;
-                r.message = "VD créé mais getDisplay() null";
-                st.abortFromHere = true;
-                return;
-            }
-            st.vdDisplayId  = d.getDisplayId();
-            st.vdLayerStack = getLayerStackForDisplay(ctx, st.vdDisplayId);
-            if (st.vdLayerStack < 0) {
-                r.status  = Status.FAIL;
-                r.message = "VD id=" + st.vdDisplayId + " mais getLayerStack() échoué";
-                st.abortFromHere = true;
-                return;
-            }
-            r.status  = Status.PASS;
-            r.message = "VD id=" + st.vdDisplayId
-                      + " layerStack=" + st.vdLayerStack + " flags=322 surface=SC";
-        } catch (Exception e) {
+        // The daemon already created the TRUSTED VD in CLUSTER_ATTACH.
+        // We just verify it's visible and retrieve its layerStack.
+        st.vdLayerStack = getLayerStackForDisplay(ctx, st.vdDisplayId);
+        if (st.vdLayerStack < 0) {
             r.status  = Status.FAIL;
-            r.message = e.getClass().getSimpleName() + ": " + e.getMessage();
+            r.message = "VD id=" + st.vdDisplayId + " non visible dans DisplayManager (layerStack introuvable)";
             st.abortFromHere = true;
+            return;
         }
+        r.status  = Status.PASS;
+        r.message = "VD id=" + st.vdDisplayId + " layerStack=" + st.vdLayerStack + " TRUSTED (daemon)";
     }
 
     // ── F04 — Démarrer MirrorDaemon ───────────────────────────────────────────
@@ -431,12 +400,14 @@ public final class Dl3FissionRunner {
             if (ok == 1) {
                 st.clusterOutputSurface =
                         reply.readParcelable(Surface.class.getClassLoader());
-                if (st.clusterOutputSurface != null && st.clusterOutputSurface.isValid()) {
+                st.vdDisplayId = reply.readInt();   // VD TRUSTED créé par le daemon
+                if (st.clusterOutputSurface != null && st.clusterOutputSurface.isValid()
+                        && st.vdDisplayId >= 0) {
                     r.status  = Status.PASS;
-                    r.message = "SC layer layerStack=1 ✓ — Surface prête pour VD (F03)";
+                    r.message = "SC layer ✓ surface valide — VD TRUSTED displayId=" + st.vdDisplayId;
                 } else {
                     r.status  = Status.FAIL;
-                    r.message = "Surface retournée invalide ou null";
+                    r.message = "Surface invalide ou displayId=" + st.vdDisplayId;
                     st.abortFromHere = true;
                 }
             } else {
@@ -609,11 +580,7 @@ public final class Dl3FissionRunner {
             }
         }
 
-        // 2. Release VirtualDisplay
-        if (st.vd != null) {
-            try { st.vd.release(); } catch (Exception ignored) {}
-            sb.append("VD.release(id=").append(st.vdDisplayId).append(") ✓  ");
-        }
+        // VD owned and released by daemon on MIRROR_STOP — nothing to do here.
 
         // 3. Release cluster output surface
         if (st.clusterOutputSurface != null) {

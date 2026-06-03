@@ -76,8 +76,7 @@ public class Dl3ProjectionActivity extends Activity {
     private boolean         mSurfaceReady = false;
     private boolean         mProjecting   = false;
     private SurfaceHolder   mHolder;
-    // VD is created here (OpenBYD 2.2 pattern: client owns VD, daemon only provides the Surface).
-    private VirtualDisplay  mVirtualDisplay;
+    // VD is owned by the daemon (TRUSTED, created in CLUSTER_ATTACH, released on MIRROR_STOP).
     private IBinder         mDaemonBinder;
     private int             mVdDisplayId  = -1;
     private int             mVdLayerStack = -1;
@@ -237,10 +236,10 @@ public class Dl3ProjectionActivity extends Activity {
         if (mDaemonBinder == null) throw new RuntimeException("Binder daemon introuvable");
         AppLogger.d(TAG, "Daemon binder OK");
 
-        // Step 3 — CLUSTER_ATTACH → daemon creates SurfaceControl layer on cluster (layerStack=1)
-        //           and returns its Surface. No VD management in the daemon (OpenBYD 2.2 pattern).
+        // Step 3 — CLUSTER_ATTACH → daemon creates cluster surface (overlay or SurfaceControl)
+        //           AND a TRUSTED VirtualDisplay bound to it (shell uid=2000 has the permission).
+        //           Returns surface + displayId. The daemon holds the VD; MIRROR_STOP releases it.
         safeRun(() -> setStatus(getString(R.string.projection_status_step_attach)));
-        Surface clusterSurface;
         {
             Parcel data  = Parcel.obtain();
             Parcel reply = Parcel.obtain();
@@ -253,36 +252,19 @@ public class Dl3ProjectionActivity extends Activity {
                 reply.readException();
                 int ok = reply.readInt();
                 if (ok != 1) throw new RuntimeException("CLUSTER_ATTACH ok=0");
-                clusterSurface = reply.readParcelable(Surface.class.getClassLoader());
-                if (clusterSurface == null || !clusterSurface.isValid())
-                    throw new RuntimeException("CLUSTER_ATTACH: surface invalide");
-                AppLogger.d(TAG, "CLUSTER_ATTACH OK surface=" + clusterSurface);
+                Surface clusterSurface = reply.readParcelable(Surface.class.getClassLoader());
+                mVdDisplayId = reply.readInt();           // VD display ID from daemon
+                mVdLayerStack = mVdDisplayId;             // on AOSP API 29 layerStack == displayId
+                AppLogger.d(TAG, "CLUSTER_ATTACH OK surface=" + clusterSurface
+                        + " displayId=" + mVdDisplayId);
+                if (mVdDisplayId < 0) throw new RuntimeException("CLUSTER_ATTACH: invalid displayId");
             } finally {
                 data.recycle();
                 reply.recycle();
             }
         }
 
-        // Step 4 — Client creates VirtualDisplay WITH the cluster surface (OpenBYD 2.2 pattern).
-        // flags=322 = PRESENTATION(2) | SUPPORTS_TOUCH(0x40) | DESTROY_CONTENT_ON_REMOVAL(0x100).
-        // Surface is passed at construction — the VD renders directly onto the cluster SC layer.
-        safeRun(() -> setStatus(getString(R.string.projection_status_step_vd)));
-        {
-            DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
-            if (dm == null) throw new RuntimeException("DisplayManager unavailable");
-            mVirtualDisplay = dm.createVirtualDisplay(
-                    "devtools_projection_vd",
-                    CLUSTER_W, CLUSTER_H, /*dpi=*/ 160,
-                    clusterSurface,
-                    /*flags=*/ 322);
-            if (mVirtualDisplay == null) throw new RuntimeException("createVirtualDisplay → null");
-            Display vdDisplay = mVirtualDisplay.getDisplay();
-            if (vdDisplay == null) throw new RuntimeException("VD.getDisplay() → null");
-            mVdDisplayId  = vdDisplay.getDisplayId();
-            // On AOSP API 29, assignLayerStackLocked always returns displayId.
-            mVdLayerStack = mVdDisplayId;
-            AppLogger.d(TAG, "VD OK displayId=" + mVdDisplayId + " layerStack=" + mVdLayerStack);
-        }
+        // Step 4 skipped — VD is owned and managed by the daemon (MIRROR_STOP releases it).
 
         // Step 5 — Launch target app on VD
         // Strategy (OpenBYD launchAndForce pattern):
@@ -394,11 +376,7 @@ public class Dl3ProjectionActivity extends Activity {
             }
             mDaemonBinder = null;
         }
-        // Release VirtualDisplay owned by this activity.
-        if (mVirtualDisplay != null) {
-            try { mVirtualDisplay.release(); } catch (Exception ignored) {}
-            mVirtualDisplay = null;
-        }
+        // VD owned and released by daemon on MIRROR_STOP.
         mVdDisplayId  = -1;
         mVdLayerStack = -1;
         // Kill daemon
