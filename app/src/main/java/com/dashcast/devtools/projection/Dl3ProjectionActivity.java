@@ -76,8 +76,8 @@ public class Dl3ProjectionActivity extends Activity {
     private boolean         mSurfaceReady = false;
     private boolean         mProjecting   = false;
     private SurfaceHolder   mHolder;
-    // mVd is created by the daemon (TRANSACT_CREATE_VD) so the daemon can use FLAG_TRUSTED
-    // (shell uid=2000 has INTERNAL_SYSTEM_WINDOW; app does not). We only track the IDs.
+    // VD is created here (OpenBYD 2.2 pattern: client owns VD, daemon only provides the Surface).
+    private VirtualDisplay  mVirtualDisplay;
     private IBinder         mDaemonBinder;
     private int             mVdDisplayId  = -1;
     private int             mVdLayerStack = -1;
@@ -237,39 +237,10 @@ public class Dl3ProjectionActivity extends Activity {
         if (mDaemonBinder == null) throw new RuntimeException("Binder daemon introuvable");
         AppLogger.d(TAG, "Daemon binder OK");
 
-        // Step 3 — Ask daemon to create VirtualDisplay with FLAG_TRUSTED
-        // Daemon (shell uid=2000) has INTERNAL_SYSTEM_WINDOW → FLAG_TRUSTED allowed.
-        // Apps like Waze check Display.FLAG_TRUSTED at runtime and refuse untrusted displays.
-        safeRun(() -> setStatus(getString(R.string.projection_status_step_vd)));
-        {
-            Parcel data  = Parcel.obtain();
-            Parcel reply = Parcel.obtain();
-            try {
-                data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
-                data.writeInt(CLUSTER_W);
-                data.writeInt(CLUSTER_H);
-                data.writeInt(160);
-                mDaemonBinder.transact(MirrorDaemon.TRANSACT_CREATE_VD, data, reply, 0);
-                reply.readException();
-                mVdDisplayId = reply.readInt();
-            } finally {
-                data.recycle();
-                reply.recycle();
-            }
-        }
-        if (mVdDisplayId < 0) throw new RuntimeException("CREATE_VD: daemon returned -1 (FLAG_TRUSTED non supporté sur ce ROM?)");
-        AppLogger.d(TAG, "CREATE_VD OK displayId=" + mVdDisplayId);
-
-        // Get the VD's layerStack (needed for MIRROR_START preview).
-        // On AOSP (API 29), DisplayManagerService.assignLayerStackLocked() always returns displayId,
-        // so layerStack == displayId. We skip DisplayManager.getDisplay(id) because on FLAG_TRUSTED
-        // VirtualDisplays created from a different process (uid=2000 daemon), getDisplayInfo() may
-        // return null due to OEM access-control checks on FLAG_TRUSTED displays.
-        mVdLayerStack = mVdDisplayId;
-        AppLogger.d(TAG, "VD layerStack=" + mVdLayerStack + " (== displayId, AOSP guarantee)");
-
-        // Step 4 — CLUSTER_ATTACH → daemon creates SC layer + internally calls setVirtualDisplaySurface
+        // Step 3 — CLUSTER_ATTACH → daemon creates SurfaceControl layer on cluster (layerStack=1)
+        //           and returns its Surface. No VD management in the daemon (OpenBYD 2.2 pattern).
         safeRun(() -> setStatus(getString(R.string.projection_status_step_attach)));
+        Surface clusterSurface;
         {
             Parcel data  = Parcel.obtain();
             Parcel reply = Parcel.obtain();
@@ -282,14 +253,35 @@ public class Dl3ProjectionActivity extends Activity {
                 reply.readException();
                 int ok = reply.readInt();
                 if (ok != 1) throw new RuntimeException("CLUSTER_ATTACH ok=0");
-                // Daemon called setVirtualDisplaySurface internally — VD is now bound to cluster SC.
-                // Surface is still returned in reply for backward compat with fission runners.
-                reply.readParcelable(Surface.class.getClassLoader()); // read and discard
-                AppLogger.d(TAG, "CLUSTER_ATTACH OK (daemon set VD surface)");
+                clusterSurface = reply.readParcelable(Surface.class.getClassLoader());
+                if (clusterSurface == null || !clusterSurface.isValid())
+                    throw new RuntimeException("CLUSTER_ATTACH: surface invalide");
+                AppLogger.d(TAG, "CLUSTER_ATTACH OK surface=" + clusterSurface);
             } finally {
                 data.recycle();
                 reply.recycle();
             }
+        }
+
+        // Step 4 — Client creates VirtualDisplay WITH the cluster surface (OpenBYD 2.2 pattern).
+        // flags=322 = PRESENTATION(2) | SUPPORTS_TOUCH(0x40) | DESTROY_CONTENT_ON_REMOVAL(0x100).
+        // Surface is passed at construction — the VD renders directly onto the cluster SC layer.
+        safeRun(() -> setStatus(getString(R.string.projection_status_step_vd)));
+        {
+            DisplayManager dm = (DisplayManager) getSystemService(Context.DISPLAY_SERVICE);
+            if (dm == null) throw new RuntimeException("DisplayManager unavailable");
+            mVirtualDisplay = dm.createVirtualDisplay(
+                    "devtools_projection_vd",
+                    CLUSTER_W, CLUSTER_H, /*dpi=*/ 160,
+                    clusterSurface,
+                    /*flags=*/ 322);
+            if (mVirtualDisplay == null) throw new RuntimeException("createVirtualDisplay → null");
+            Display vdDisplay = mVirtualDisplay.getDisplay();
+            if (vdDisplay == null) throw new RuntimeException("VD.getDisplay() → null");
+            mVdDisplayId  = vdDisplay.getDisplayId();
+            // On AOSP API 29, assignLayerStackLocked always returns displayId.
+            mVdLayerStack = mVdDisplayId;
+            AppLogger.d(TAG, "VD OK displayId=" + mVdDisplayId + " layerStack=" + mVdLayerStack);
         }
 
         // Step 5 — Launch target app on VD
@@ -402,7 +394,11 @@ public class Dl3ProjectionActivity extends Activity {
             }
             mDaemonBinder = null;
         }
-        // VD + SC surface managed by daemon — released on MIRROR_STOP via IDisplayManager.
+        // Release VirtualDisplay owned by this activity.
+        if (mVirtualDisplay != null) {
+            try { mVirtualDisplay.release(); } catch (Exception ignored) {}
+            mVirtualDisplay = null;
+        }
         mVdDisplayId  = -1;
         mVdLayerStack = -1;
         // Kill daemon

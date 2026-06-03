@@ -307,16 +307,7 @@ public final class MirrorDaemon {
             sClusterSc = null;
         }
         releaseClusterOverlay();
-        // Release VirtualDisplay created by daemon (OpenBYD approach).
-        if (sVirtualDisplay != null) {
-            try {
-                sVirtualDisplay.release();
-                log("VD released");
-            } catch (Exception e) {
-                log("VD release ERROR: " + e.getMessage());
-            }
-            sVirtualDisplay = null;
-        }
+        // VirtualDisplay is owned and released by the caller — daemon does not touch it.
         reply.writeNoException();
         return true;
     }
@@ -459,31 +450,16 @@ public final class MirrorDaemon {
                 sVirtualDisplay = null;
             }
 
+            // Legacy path: VD created without surface (null). Aligned with OpenBYD 2.2, flags=322.
+            // New callers should use TRANSACT_CLUSTER_ATTACH to get the Surface, then create the
+            // VirtualDisplay themselves with that Surface passed at construction time.
             DisplayManager dm = sContext.getSystemService(DisplayManager.class);
-            // Try flags = 1346 (322 | 1024) = PRESENTATION | SUPPORTS_TOUCH | DESTROY_CONTENT_ON_REMOVAL | TRUSTED.
-            // VIRTUAL_DISPLAY_FLAG_TRUSTED (1024) makes canPlaceEntityOnDisplay() return true for
-            // ALL activities, including non-resizable ones (e.g. com.waze/.MainActivity). On some
-            // Android 10 ROMs this requires CREATE_TRUSTED_VIRTUAL_DISPLAY permission; if the
-            // daemon lacks it, DisplayManagerService silently strips the flag or throws — we fall
-            // back to flags=322 in that case.
-            VirtualDisplay vd = null;
-            try {
-                vd = dm.createVirtualDisplay(
-                        "devtools_projection_vd",
-                        w, h, dpi,
-                        /*surface=*/ null,
-                        /*flags=*/   1346 /* 322 | 1024: +TRUSTED */);
-                if (vd != null) log("CREATE_VD using TRUSTED flags=1346");
-            } catch (Exception eTrusted) {
-                log("CREATE_VD TRUSTED failed (" + eTrusted.getMessage() + "), fallback to 322");
-            }
-            if (vd == null) {
-                vd = dm.createVirtualDisplay(
-                        "devtools_projection_vd",
-                        w, h, dpi,
-                        /*surface=*/ null,
-                        /*flags=*/   322 /* PRESENTATION | SUPPORTS_TOUCH | DESTROY_CONTENT_ON_REMOVAL */);
-            }
+            VirtualDisplay vd = dm.createVirtualDisplay(
+                    "devtools_projection_vd",
+                    w, h, dpi,
+                    /*surface=*/ null,
+                    /* flags=322: PRESENTATION(2)|SUPPORTS_TOUCH(0x40)|DESTROY_CONTENT_ON_REMOVAL(0x100) */
+                    322);
 
             if (vd == null) throw new RuntimeException("createVirtualDisplay returned null");
 
@@ -822,8 +798,8 @@ public final class MirrorDaemon {
                     try {
                         for (int iter = 0; iter < 20; iter++) {
                             Thread.sleep(500);
-                            if (sVirtualDisplay == null) {
-                                log("WATCHDOG: VD released, aborting");
+                            if (sClusterSc == null) {
+                                log("WATCHDOG: cluster SC released (MIRROR_STOP), aborting");
                                 return;
                             }
                             // Only start checking after 3 s (iter 6+)
@@ -978,10 +954,12 @@ public final class MirrorDaemon {
     }
 
     /**
-     * TRANSACT_CLUSTER_ATTACH — creates a SurfaceControl buffer layer assigned to
-     * {@code layerStack} (=1 for the BYD cluster display) and returns its {@link Surface}.
-     * The caller passes this Surface to {@link android.hardware.display.VirtualDisplay#setSurface}
-     * so that anything rendered on the VirtualDisplay is composited directly onto the cluster.
+     * TRANSACT_CLUSTER_ATTACH — creates a SurfaceControl buffer layer on {@code layerStack}
+     * (=1 for the BYD cluster display) and returns its {@link Surface}.
+     *
+     * <p>The caller creates a {@link android.hardware.display.VirtualDisplay} <em>with this
+     * Surface passed at construction time</em> (OpenBYD 2.2 pattern, flags=322). The daemon
+     * does NOT create or manage the VirtualDisplay — that is entirely the caller's responsibility.
      *
      * <p>Wire format (client side):
      * <pre>
@@ -1000,16 +978,10 @@ public final class MirrorDaemon {
         int h          = data.readInt();
         log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h);
 
+        // VirtualDisplay is created by the caller with this Surface at construction time
+        // (OpenBYD 2.2 pattern). The daemon does not call setSurface — the caller owns the VD.
         Surface overlaySurface = tryAttachClusterOverlay(layerStack, w, h);
         if (overlaySurface != null) {
-            if (sVirtualDisplay != null) {
-                try {
-                    sVirtualDisplay.setSurface(overlaySurface);
-                    log("CLUSTER_ATTACH: overlay VD.setSurface OK");
-                } catch (Exception e) {
-                    log("CLUSTER_ATTACH: overlay VD.setSurface ERROR: " + e.getMessage());
-                }
-            }
             reply.writeNoException();
             reply.writeInt(1);
             reply.writeParcelable(overlaySurface, 0);
@@ -1081,16 +1053,7 @@ public final class MirrorDaemon {
 
             sClusterSc = sc;
             log("CLUSTER_ATTACH OK sc=" + sc + " surface.valid=" + outputSurface.isValid());
-
-            // Bind the cluster SC surface to the VirtualDisplay (OpenBYD approach).
-            if (sVirtualDisplay != null) {
-                try {
-                    sVirtualDisplay.setSurface(outputSurface);
-                    log("CLUSTER_ATTACH: VD.setSurface OK");
-                } catch (Exception e) {
-                    log("CLUSTER_ATTACH: VD.setSurface ERROR: " + e.getMessage());
-                }
-            }
+            // Caller creates VirtualDisplay with this surface at construction time — no setSurface.
 
             reply.writeNoException();
             reply.writeInt(1);

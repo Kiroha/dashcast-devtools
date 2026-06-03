@@ -112,10 +112,6 @@ public final class Dl3FissionRunner {
         list.add(new TestDef("F02",
                 "Displays présents",
                 "DisplayManager.getDisplays() → ≥ 2 displays (id=0 principal + id=1 cluster xdja)."));
-        list.add(new TestDef("F03",
-                "Créer VirtualDisplay byd_test_vd",
-                "createVirtualDisplay(\"byd_test_vd\", 1920×720, PRESENTATION|OWN_CONTENT_ONLY,"
-                + " surface=null) → displayId ≥ 2 + layerStack via getLayerStack() hidden API."));
         list.add(new TestDef("F04",
                 "Démarrer MirrorDaemon",
                 "setsid app_process64 CLASSPATH=<apk> MirrorDaemon → sleep 3 s"
@@ -124,9 +120,13 @@ public final class Dl3FissionRunner {
                 "Connecter Binder daemon",
                 "ServiceManager.getService(\"devtools_mirror_daemon\") via reflection → non-null."));
         list.add(new TestDef("F06",
-                "TRANSACT_CLUSTER_ATTACH",
-                "Daemon crée SurfaceControl layer layerStack=1 → Surface output"
-                + " → vd.setSurface() : VD sort directement sur le cluster physique."));
+                "TRANSACT_CLUSTER_ATTACH — Surface cluster",
+                "Daemon crée SurfaceControl layer layerStack=1 → retourne Surface."
+                + " Le client créera le VD avec cette Surface (OpenBYD 2.2 pattern)."));
+        list.add(new TestDef("F03",
+                "Créer VirtualDisplay avec Surface cluster (OpenBYD 2.2)",
+                "createVirtualDisplay(\"byd_test_vd\", 1920×720, dpi=160, surface=clusterSC,"
+                + " flags=322) → displayId + layerStack. Surface passée à la construction."));
         list.add(new TestDef("F07",
                 "Lancer app sur VD",
                 "am start --display <vdId> -n <component> 2>&1 → pas d'erreur am."));
@@ -287,10 +287,16 @@ public final class Dl3FissionRunner {
         r.message = count + " displays : " + sb.toString().trim();
     }
 
-    // ── F03 — Créer VirtualDisplay ────────────────────────────────────────────
+    // ── F03 — Créer VirtualDisplay avec la Surface cluster (OpenBYD 2.2) ────────
 
     private static void runF03(Context ctx, TestResult r, State st) {
         if (st.abortFromHere) { skip(r, "aborted"); return; }
+        if (st.clusterOutputSurface == null || !st.clusterOutputSurface.isValid()) {
+            r.status  = Status.FAIL;
+            r.message = "clusterOutputSurface null/invalide (F06 échoué)";
+            st.abortFromHere = true;
+            return;
+        }
         try {
             DisplayManager dm = (DisplayManager) ctx.getSystemService(Context.DISPLAY_SERVICE);
             if (dm == null) {
@@ -299,10 +305,11 @@ public final class Dl3FissionRunner {
                 st.abortFromHere = true;
                 return;
             }
-            int flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION
-                      | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
+            // flags=322 = PRESENTATION(2)|SUPPORTS_TOUCH(0x40)|DESTROY_CONTENT_ON_REMOVAL(0x100)
+            // Surface passée à la construction — VD rend directement dans le SC layer cluster.
             st.vd = dm.createVirtualDisplay(
-                    "byd_test_vd", 1920, 720, /*dpi=*/ 160, /*surface=*/ null, flags);
+                    "byd_test_vd", 1920, 720, /*dpi=*/ 160,
+                    st.clusterOutputSurface, /*flags=*/ 322);
 
             if (st.vd == null) {
                 r.status  = Status.FAIL;
@@ -327,7 +334,7 @@ public final class Dl3FissionRunner {
             }
             r.status  = Status.PASS;
             r.message = "VD id=" + st.vdDisplayId
-                      + " layerStack=" + st.vdLayerStack + " 1920×720 dpi=160";
+                      + " layerStack=" + st.vdLayerStack + " flags=322 surface=SC";
         } catch (Exception e) {
             r.status  = Status.FAIL;
             r.message = e.getClass().getSimpleName() + ": " + e.getMessage();
@@ -399,19 +406,13 @@ public final class Dl3FissionRunner {
         }
     }
 
-    // ── F06 — TRANSACT_CLUSTER_ATTACH ─────────────────────────────────────────────
+    // ── F06 — TRANSACT_CLUSTER_ATTACH — récupère la Surface SC cluster ────────────
 
     private static void runF06(Context ctx, TestResult r, State st) {
         if (st.abortFromHere) { skip(r, "aborted"); return; }
         if (st.daemonBinder == null) {
             r.status = Status.FAIL;
             r.message = "Binder null (F05 échoué)";
-            st.abortFromHere = true;
-            return;
-        }
-        if (st.vd == null) {
-            r.status = Status.FAIL;
-            r.message = "VD null (F03 échoué)";
             st.abortFromHere = true;
             return;
         }
@@ -431,9 +432,8 @@ public final class Dl3FissionRunner {
                 st.clusterOutputSurface =
                         reply.readParcelable(Surface.class.getClassLoader());
                 if (st.clusterOutputSurface != null && st.clusterOutputSurface.isValid()) {
-                    st.vd.setSurface(st.clusterOutputSurface);
                     r.status  = Status.PASS;
-                    r.message = "SC layer layerStack=1 ✓ → vd.setSurface() OK";
+                    r.message = "SC layer layerStack=1 ✓ — Surface prête pour VD (F03)";
                 } else {
                     r.status  = Status.FAIL;
                     r.message = "Surface retournée invalide ou null";
