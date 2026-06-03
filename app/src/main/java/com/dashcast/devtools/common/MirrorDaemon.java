@@ -691,6 +691,10 @@ public final class MirrorDaemon {
             boolean moved = false;
 
             // --- Primary: moveStackToDisplay (API 29) ---
+            // Each invoke is wrapped individually so that an InvocationTargetException
+            // (e.g. SecurityException or IllegalArgumentException from the system service
+            // on a TRUSTED VirtualDisplay) does not abort the function — the fallback
+            // task-based APIs are tried next.
             if (!moved && stackId != -1) {
                 for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
                     if (m.getName().equals("moveStackToDisplay")
@@ -698,10 +702,17 @@ public final class MirrorDaemon {
                             && m.getParameterTypes()[0] == int.class
                             && m.getParameterTypes()[1] == int.class) {
                         m.setAccessible(true);
-                        m.invoke(iatm, stackId, displayId);
-                        sb.append("moveStackToDisplay(stackId=").append(stackId)
-                          .append(", ").append(displayId).append(") OK\n");
-                        moved = true;
+                        try {
+                            m.invoke(iatm, stackId, displayId);
+                            sb.append("moveStackToDisplay(stackId=").append(stackId)
+                              .append(", ").append(displayId).append(") OK\n");
+                            moved = true;
+                        } catch (Exception moveEx) {
+                            Throwable cause = (moveEx.getCause() != null) ? moveEx.getCause() : moveEx;
+                            sb.append("moveStackToDisplay threw: ")
+                              .append(cause.getClass().getSimpleName()).append(": ")
+                              .append(cause.getMessage()).append(" — trying task-based fallback\n");
+                        }
                         break;
                     }
                 }
@@ -721,10 +732,17 @@ public final class MirrorDaemon {
                 }
                 if (move != null) {
                     move.setAccessible(true);
-                    move.invoke(iatm, taskId, displayId);
-                    sb.append(move.getName()).append("(taskId=").append(taskId)
-                      .append(", ").append(displayId).append(") OK\n");
-                    moved = true;
+                    try {
+                        move.invoke(iatm, taskId, displayId);
+                        sb.append(move.getName()).append("(taskId=").append(taskId)
+                          .append(", ").append(displayId).append(") OK\n");
+                        moved = true;
+                    } catch (Exception moveEx) {
+                        Throwable cause = (moveEx.getCause() != null) ? moveEx.getCause() : moveEx;
+                        sb.append(move.getName()).append(" threw: ")
+                          .append(cause.getClass().getSimpleName()).append(": ")
+                          .append(cause.getMessage()).append("\n");
+                    }
                 }
             }
 
@@ -949,9 +967,11 @@ public final class MirrorDaemon {
             reply.writeString("OK taskId=" + taskId + "\n" + sb);
 
         } catch (Exception e) {
-            log("LAUNCH_AND_FORCE ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            Throwable cause = (e instanceof java.lang.reflect.InvocationTargetException
+                    && e.getCause() != null) ? e.getCause() : e;
+            log("LAUNCH_AND_FORCE ERROR: " + cause.getClass().getSimpleName() + ": " + cause.getMessage());
             reply.writeNoException();
-            reply.writeString("ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage()
+            reply.writeString("ERROR: " + cause.getClass().getSimpleName() + ": " + cause.getMessage()
                     + "\n" + sb);
         }
         return true;
@@ -1286,7 +1306,11 @@ public final class MirrorDaemon {
     }
 
     private static Display resolveClusterDisplay(int displayIdHint) {
-        DisplayManager dm = sContext.getSystemService(DisplayManager.class);
+        // sContext (createPackageContext in systemMain mode) has null Resources;
+        // DisplayManager.getOrCreateDisplayLocked() calls mContext.getResources() → NPE.
+        // sSysContext (ActivityThread.getSystemContext) has valid framework Resources.
+        Context dmCtx = (sSysContext != null) ? sSysContext : sContext;
+        DisplayManager dm = dmCtx.getSystemService(DisplayManager.class);
         if (dm == null) return null;
 
         Display display = dm.getDisplay(displayIdHint);
