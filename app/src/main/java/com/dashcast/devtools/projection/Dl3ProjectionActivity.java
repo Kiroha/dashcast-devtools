@@ -70,10 +70,12 @@ public class Dl3ProjectionActivity extends Activity {
     private static final int CLUSTER_H = 720;
 
     // ── Views ─────────────────────────────────────────────────────────────────
-    private MaterialButton btnStart;
-    private MaterialButton btnStop;
-    private SurfaceView    svPreview;
-    private TextView       tvStatus;
+    private MaterialButton            btnStart;
+    private MaterialButton            btnStop;
+    private SurfaceView               svPreview;
+    private TextView                  tvStatus;
+    private android.widget.LinearLayout llSlots;
+    private View                      dividerSlots;
 
     // ── Projection state ──────────────────────────────────────────────────────
     private boolean         mDestroyed    = false;
@@ -195,10 +197,12 @@ public class Dl3ProjectionActivity extends Activity {
             return false;
         });
 
-        btnStart   = findViewById(R.id.btn_projection_start);
-        btnStop    = findViewById(R.id.btn_projection_stop);
-        svPreview  = findViewById(R.id.sv_projection_preview);
-        tvStatus   = findViewById(R.id.tv_projection_status);
+        btnStart     = findViewById(R.id.btn_projection_start);
+        btnStop      = findViewById(R.id.btn_projection_stop);
+        svPreview    = findViewById(R.id.sv_projection_preview);
+        tvStatus     = findViewById(R.id.tv_projection_status);
+        llSlots      = findViewById(R.id.ll_slots);
+        dividerSlots = findViewById(R.id.divider_slots);
 
         btnStop.setEnabled(false);
 
@@ -530,18 +534,45 @@ public class Dl3ProjectionActivity extends Activity {
         safeRun(this::updateSlotsStatus);
     }
 
-    /** Met à jour le texte de statut avec la liste des slots actifs. */
+    /** Repeuple la liste des slots actifs avec une ligne par app. */
     private void updateSlotsStatus() {
+        if (llSlots == null) return;
+        llSlots.removeAllViews();
+
         if (mSlots.isEmpty()) {
-            setStatus(getString(R.string.projection_status_idle));
+            llSlots.setVisibility(View.GONE);
+            dividerSlots.setVisibility(View.GONE);
+            tvStatus.setVisibility(View.VISIBLE);
+            tvStatus.setText(R.string.projection_status_idle);
             return;
         }
-        StringBuilder sb = new StringBuilder();
-        for (SlotState s : mSlots.values()) {
-            if (sb.length() > 0) sb.append("  |  ");
-            sb.append(s.label).append(" [").append(s.rect.width()).append("×").append(s.rect.height()).append("]");
+
+        llSlots.setVisibility(View.VISIBLE);
+        dividerSlots.setVisibility(View.VISIBLE);
+        tvStatus.setVisibility(View.GONE);
+
+        for (SlotState slot : mSlots.values()) {
+            View row = LayoutInflater.from(this).inflate(R.layout.item_slot, llSlots, false);
+
+            TextView tvLabel = row.findViewById(R.id.tv_slot_label);
+            tvLabel.setText(slot.label
+                    + "  " + slot.rect.width() + "×" + slot.rect.height()
+                    + "  @(" + slot.rect.left + "," + slot.rect.top + ")");
+
+            MaterialButton btnFs = row.findViewById(R.id.btn_slot_fullscreen);
+            btnFs.setEnabled(mSlots.size() > 1 || !slot.rect.equals(effectiveRect()));
+            btnFs.setOnClickListener(v -> fullscreenSlot(slot.pkg));
+
+            MaterialButton btnClose = row.findViewById(R.id.btn_slot_close);
+            btnClose.setOnClickListener(v ->
+                    new AlertDialog.Builder(this)
+                            .setTitle("Fermer " + slot.label + " ?")
+                            .setPositiveButton("Fermer", (d, w) -> releaseSlot(slot.pkg))
+                            .setNegativeButton("Annuler", null)
+                            .show());
+
+            llSlots.addView(row);
         }
-        setStatus(sb.toString());
     }
 
     private void stopProjectionInternal() {

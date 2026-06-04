@@ -39,9 +39,28 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical">
+            android:orientation="vertical"
+            android:padding="4dp">
 
-            <!-- Status line -->
+            <!-- Slots actifs (dynamique, une ligne par app) -->
+            <LinearLayout
+                android:id="@+id/ll_slots"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"/>
+
+            <!-- Séparateur visible uniquement quand slots actifs -->
+            <View
+                android:id="@+id/divider_slots"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="8dp"
+                android:background="@color/md_outline_variant"
+                android:visibility="gone"/>
+
+            <!-- Status idle -->
             <TextView
                 android:id="@+id/tv_projection_status"
                 android:layout_width="match_parent"
@@ -49,9 +68,9 @@
                 android:text="@string/projection_status_idle"
                 android:textSize="13sp"
                 android:textColor="?android:attr/textColorSecondary"
-                android:layout_marginBottom="12dp"/>
+                android:layout_marginBottom="10dp"/>
 
-            <!-- Start / Stop buttons -->
+            <!-- Boutons Lancer / Tout arrêter -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
