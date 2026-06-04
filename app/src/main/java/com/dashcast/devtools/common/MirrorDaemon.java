@@ -984,22 +984,15 @@ public final class MirrorDaemon {
         int h          = data.readInt();
         log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h);
 
-        // Try the SurfaceView overlay first; fall back to the SurfaceControl buffer layer.
-        // Whichever succeeds, immediately create a TRUSTED VirtualDisplay bound to that surface.
-        // The daemon (shell uid=2000) holds CREATE_TRUSTED_VIRTUAL_DISPLAY; the caller does not.
-        Surface overlaySurface = tryAttachClusterOverlay(layerStack, w, h);
-        if (overlaySurface != null) {
-            int displayId = createAndStoreTrustedVd(overlaySurface, w, h);
-            if (displayId >= 0) {
-                reply.writeNoException();
-                reply.writeInt(1);
-                reply.writeParcelable(overlaySurface, 0);
-                reply.writeInt(displayId);
-                return true;
-            }
-            // VD creation failed — fall through to SurfaceControl path
-            releaseClusterOverlay();
-        }
+        // The SurfaceView overlay succeeds on this ROM but its window sits at a normal WMS
+        // z-order, which places it UNDER the XDJA Qt VirtualDisplay that drives the physical
+        // cluster display.  The SurfaceControl buffer layer sets layer=Integer.MAX_VALUE-1 at
+        // the hardware compositor level — above everything including XDJA — and is therefore
+        // the only approach that guarantees visibility on the physical cluster.
+        //
+        // We still attempt the overlay for window lifecycle management (future input routing),
+        // but the VD output surface is ALWAYS the SurfaceControl layer.
+        tryAttachClusterOverlay(layerStack, w, h); // best-effort; result not used for VD
 
         try {
             Class<?> scCls      = Class.forName("android.view.SurfaceControl");
