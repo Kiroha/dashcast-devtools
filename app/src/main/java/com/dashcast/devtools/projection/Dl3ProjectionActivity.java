@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.VirtualDisplay;
 import android.os.Bundle;
@@ -87,17 +88,84 @@ public class Dl3ProjectionActivity extends Activity {
     // Touch mapping: set to true once MIRROR_START succeeds.
     private volatile boolean mMirrorReady = false;
 
-    // ── Overlay sizing (marges depuis chaque bord, persistées en SharedPrefs) ──
-    private static final String PREFS_NAME    = "overlay_sizing";
+    // ── Overlay sizing (marges, persistées) ───────────────────────────────────
+    private static final String PREFS_SIZING  = "overlay_sizing";
     private static final String PREF_TOP      = "margin_top";
     private static final String PREF_BOTTOM   = "margin_bottom";
     private static final String PREF_LEFT     = "margin_left";
     private static final String PREF_RIGHT    = "margin_right";
-    // Valeurs courantes — initialisées depuis SharedPrefs dans onCreate
-    private int mMarginTop    = 0;
-    private int mMarginBottom = 0;
-    private int mMarginLeft   = 0;
-    private int mMarginRight  = 0;
+    private int mMarginTop = 0, mMarginBottom = 0, mMarginLeft = 0, mMarginRight = 0;
+
+    // ── Multi-slot (une paire overlay+VD par app) ─────────────────────────────
+
+    /** Apps de navigation connues — proposent un popup de taille au premier lancement. */
+    private static final java.util.Set<String> NAV_PKGS = new java.util.HashSet<>(
+            java.util.Arrays.asList(
+                    "com.waze", "com.google.android.apps.maps",
+                    "net.osmand.plus", "net.osmand",
+                    "com.here.app.maps", "com.sygic.maps",
+                    "com.mapbox.navigation.examples"));
+
+    private static final String PREFS_CATEGORIES = "app_categories";
+    private static final String PREFS_RECTS      = "app_rects";
+
+    /** Un slot actif par package. */
+    private static final class SlotState {
+        final String pkg;
+        String label;
+        int displayId;
+        int layerStack;
+        Rect rect; // position/taille sur le cluster
+
+        SlotState(String pkg, String label, int displayId, Rect rect) {
+            this.pkg = pkg; this.label = label;
+            this.displayId = displayId; this.layerStack = displayId;
+            this.rect = rect;
+        }
+    }
+
+    /** Slots actifs (ordre d'insertion = ordre de lancement). */
+    private final java.util.LinkedHashMap<String, SlotState> mSlots = new java.util.LinkedHashMap<>();
+
+    private boolean isNavApp(String pkg) {
+        return NAV_PKGS.contains(pkg)
+                || getSharedPreferences(PREFS_CATEGORIES, MODE_PRIVATE)
+                        .getBoolean("nav_" + pkg, false);
+    }
+
+    private Rect getSavedRect(String pkg) {
+        String s = getSharedPreferences(PREFS_RECTS, MODE_PRIVATE).getString(pkg, null);
+        if (s == null) return null;
+        String[] p = s.split(",");
+        if (p.length != 4) return null;
+        try {
+            return new Rect(Integer.parseInt(p[0]), Integer.parseInt(p[1]),
+                            Integer.parseInt(p[2]), Integer.parseInt(p[3]));
+        } catch (NumberFormatException e) { return null; }
+    }
+
+    private void saveRect(String pkg, Rect r) {
+        getSharedPreferences(PREFS_RECTS, MODE_PRIVATE).edit()
+                .putString(pkg, r.left + "," + r.top + "," + r.right + "," + r.bottom)
+                .apply();
+    }
+
+    /** Zone effective tenant compte des marges configurées. */
+    private Rect effectiveRect() {
+        return new Rect(mMarginLeft, mMarginTop,
+                CLUSTER_W - mMarginRight, CLUSTER_H - mMarginBottom);
+    }
+
+    /** Zone libre = zone effective moins les rects déjà occupés (algo simple left/right). */
+    private Rect availableRect() {
+        Rect full = effectiveRect();
+        for (SlotState s : mSlots.values()) {
+            // Si un slot occupe la moitié gauche → la droite est libre et vice-versa
+            if (s.rect.left <= full.left && s.rect.right < full.right) full.left  = s.rect.right;
+            else if (s.rect.right >= full.right && s.rect.left > full.left) full.right = s.rect.left;
+        }
+        return (full.width() > 0 && full.height() > 0) ? full : null;
+    }
 
     private final Handler         mUiHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService mExec      = Executors.newSingleThreadExecutor();
@@ -110,7 +178,7 @@ public class Dl3ProjectionActivity extends Activity {
         setContentView(R.layout.activity_projection);
 
         // Charge les marges sauvegardées
-        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        SharedPreferences prefs = getSharedPreferences(PREFS_SIZING, Context.MODE_PRIVATE);
         mMarginTop    = prefs.getInt(PREF_TOP,    0);
         mMarginBottom = prefs.getInt(PREF_BOTTOM, 0);
         mMarginLeft   = prefs.getInt(PREF_LEFT,   0);
@@ -174,7 +242,11 @@ public class Dl3ProjectionActivity extends Activity {
     // ── App picker ────────────────────────────────────────────────────────────
 
     private void pickAppThenStart() {
-        if (!mSurfaceReady || mProjecting) return;
+        if (!mSurfaceReady) return;
+        if (mSlots.size() >= 2) {
+            Toast.makeText(this, "Maximum 2 apps sur le cluster", Toast.LENGTH_SHORT).show();
+            return;
+        }
         PackageManager pm = getPackageManager();
         Intent main = new Intent(Intent.ACTION_MAIN);
         main.addCategory(Intent.CATEGORY_LAUNCHER);
@@ -188,7 +260,8 @@ public class Dl3ProjectionActivity extends Activity {
         for (ResolveInfo ri : infos) {
             if (ri == null || ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
-            if (pkg == null || pkg.equals(selfPkg) || pkgToLabel.containsKey(pkg)) continue;
+            if (pkg == null || pkg.equals(selfPkg) || pkgToLabel.containsKey(pkg)
+                    || mSlots.containsKey(pkg)) continue;
             CharSequence label = ri.loadLabel(pm);
             pkgToLabel.put(pkg, label == null ? pkg : label.toString());
         }
@@ -202,179 +275,204 @@ public class Dl3ProjectionActivity extends Activity {
         final String[] labels = new String[sorted.size()];
         for (int i = 0; i < sorted.size(); i++) {
             pkgs[i]   = sorted.get(i).getKey();
-            labels[i] = sorted.get(i).getValue() + "  —  " + sorted.get(i).getKey();
+            String lbl = sorted.get(i).getValue();
+            labels[i] = (isNavApp(pkgs[i]) ? "🧭 " : "") + lbl + "  —  " + pkgs[i];
         }
         new AlertDialog.Builder(this)
                 .setTitle(R.string.diag_dl50_fission_pick_title)
                 .setItems(labels, (d, which) -> {
-                    if (which >= 0 && which < pkgs.length) startProjection(pkgs[which]);
+                    if (which >= 0 && which < pkgs.length)
+                        resolveRectThenStart(pkgs[which], sorted.get(which).getValue());
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
     }
 
-    // ── Start projection ──────────────────────────────────────────────────────
+    /**
+     * Détermine le rect à utiliser pour cette app puis lance la projection.
+     * - App nav + rect sauvegardé → utilise directement
+     * - App nav + pas de rect → affiche le picker de taille
+     * - Autre app → utilise la zone libre disponible
+     */
+    private void resolveRectThenStart(String pkg, String label) {
+        if (isNavApp(pkg)) {
+            Rect saved = getSavedRect(pkg);
+            if (saved != null) {
+                startSlot(pkg, label, saved);
+            } else {
+                showNavSizePickerDialog(pkg, label);
+            }
+        } else {
+            Rect available = availableRect();
+            if (available == null) {
+                Toast.makeText(this, "Plus d'espace disponible sur le cluster", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            startSlot(pkg, label, available);
+        }
+    }
 
-    private void startProjection(String targetPkg) {
-        if (mProjecting || !mSurfaceReady) return;
+    private void showNavSizePickerDialog(String pkg, String label) {
+        Rect eff = effectiveRect();
+        int ew = eff.width(), eh = eff.height();
+        int mx = eff.left, my = eff.top;
+
+        String[] names = {
+            "Plein écran",
+            "Gauche 1/2",  "Droite 1/2",
+            "Gauche 3/4",  "Droite 3/4",
+            "Gauche 1/4",  "Droite 1/4"
+        };
+        Rect[] rects = {
+            new Rect(mx,        my, mx + ew,       my + eh),
+            new Rect(mx,        my, mx + ew/2,     my + eh),
+            new Rect(mx + ew/2, my, mx + ew,       my + eh),
+            new Rect(mx,        my, mx + ew*3/4,   my + eh),
+            new Rect(mx + ew/4, my, mx + ew,       my + eh),
+            new Rect(mx,        my, mx + ew/4,     my + eh),
+            new Rect(mx + ew*3/4, my, mx + ew,     my + eh)
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("Taille de " + label + " sur le cluster")
+                .setItems(names, (d, which) -> {
+                    Rect chosen = rects[which];
+                    saveRect(pkg, chosen);
+                    // Option : marquer l'app comme nav si l'utilisateur a choisi manuellement
+                    getSharedPreferences(PREFS_CATEGORIES, MODE_PRIVATE).edit()
+                            .putBoolean("nav_" + pkg, true).apply();
+                    startSlot(pkg, label, chosen);
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    // ── Start slot ────────────────────────────────────────────────────────────
+
+    private void startSlot(String pkg, String label, Rect rect) {
+        if (!mSurfaceReady) return;
         btnStart.setEnabled(false);
         btnStop.setEnabled(false);
         setStatus(getString(R.string.projection_status_starting));
 
         mExec.execute(() -> {
             try {
-                doStartProjection(targetPkg);
+                doStartSlot(pkg, label, rect);
             } catch (Exception e) {
-                AppLogger.e(TAG, "startProjection error", e);
+                AppLogger.e(TAG, "startSlot error pkg=" + pkg, e);
                 safeRun(() -> {
                     setStatus(getString(R.string.projection_status_error, e.getMessage()));
                     btnStart.setEnabled(mSurfaceReady);
-                    btnStop.setEnabled(false);
+                    btnStop.setEnabled(!mSlots.isEmpty());
                 });
             }
         });
     }
 
-    private void doStartProjection(String targetPkg) throws Exception {
-        // Step 1 — Launch daemon (must come first: daemon creates VD with FLAG_TRUSTED)
-        safeRun(() -> setStatus(getString(R.string.projection_status_step_daemon)));
-        String apkPath  = getPackageCodePath();
-        String logPath  = getExternalFilesDir(null) + "/mirrordaemon_projection.log";
-        String daemonCmd = "setsid sh -c 'CLASSPATH=" + apkPath
-                + " /system/bin/app_process64 -Xnoimage-dex2oat /system/bin"
-                + " --nice-name=" + MirrorDaemon.NICE_NAME
-                + " " + MirrorDaemon.MAIN_CLASS
-                + " </dev/null >" + logPath + " 2>&1' &";
-        shellFire(daemonCmd);
-        Thread.sleep(1500); // let daemon register
+    private void doStartSlot(String pkg, String label, Rect rect) throws Exception {
+        boolean isFirst = mSlots.isEmpty();
 
-        // Step 2 — Bind to daemon
-        safeRun(() -> setStatus(getString(R.string.projection_status_step_bind)));
-        mDaemonBinder = null;
-        for (int attempt = 0; attempt < 6 && mDaemonBinder == null; attempt++) {
-            try {
-                Class<?> sm = Class.forName("android.os.ServiceManager");
-                java.lang.reflect.Method get = sm.getDeclaredMethod("getService", String.class);
-                get.setAccessible(true);
-                mDaemonBinder = (IBinder) get.invoke(null, MirrorDaemon.SERVICE_NAME);
-            } catch (Exception ignored) {}
-            if (mDaemonBinder == null) Thread.sleep(500);
+        // Step 1 — Démarre le daemon si c'est le premier slot
+        if (isFirst) {
+            safeRun(() -> setStatus(getString(R.string.projection_status_step_daemon)));
+            String apkPath = getPackageCodePath();
+            String logPath = getExternalFilesDir(null) + "/mirrordaemon_projection.log";
+            shellFire("setsid sh -c 'CLASSPATH=" + apkPath
+                    + " /system/bin/app_process64 -Xnoimage-dex2oat /system/bin"
+                    + " --nice-name=" + MirrorDaemon.NICE_NAME
+                    + " " + MirrorDaemon.MAIN_CLASS
+                    + " </dev/null >" + logPath + " 2>&1' &");
+            Thread.sleep(1500);
+
+            // Step 2 — Bind au daemon
+            safeRun(() -> setStatus(getString(R.string.projection_status_step_bind)));
+            mDaemonBinder = null;
+            for (int i = 0; i < 6 && mDaemonBinder == null; i++) {
+                try {
+                    Class<?> sm = Class.forName("android.os.ServiceManager");
+                    java.lang.reflect.Method get = sm.getDeclaredMethod("getService", String.class);
+                    get.setAccessible(true);
+                    mDaemonBinder = (IBinder) get.invoke(null, MirrorDaemon.SERVICE_NAME);
+                } catch (Exception ignored) {}
+                if (mDaemonBinder == null) Thread.sleep(500);
+            }
+            if (mDaemonBinder == null) throw new RuntimeException("Binder daemon introuvable");
+            AppLogger.d(TAG, "Daemon binder OK");
         }
-        if (mDaemonBinder == null) throw new RuntimeException("Binder daemon introuvable");
-        AppLogger.d(TAG, "Daemon binder OK");
 
-        // Step 3 — CLUSTER_ATTACH → daemon creates cluster surface (overlay or SurfaceControl)
-        //           AND a TRUSTED VirtualDisplay bound to it (shell uid=2000 has the permission).
-        //           Returns surface + displayId. The daemon holds the VD; MIRROR_STOP releases it.
+        // Step 3 — ATTACH_SLOT → daemon crée overlay+VD pour ce pkg au rect demandé
         safeRun(() -> setStatus(getString(R.string.projection_status_step_attach)));
+        int displayId;
         {
-            Parcel data  = Parcel.obtain();
-            Parcel reply = Parcel.obtain();
+            Parcel data = Parcel.obtain(), reply = Parcel.obtain();
             try {
                 data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
-                data.writeInt(1);          // layerStack=1 (cluster BYD)
-                data.writeInt(CLUSTER_W);
-                data.writeInt(CLUSTER_H);
-                mDaemonBinder.transact(MirrorDaemon.TRANSACT_CLUSTER_ATTACH, data, reply, 0);
+                data.writeString(pkg);
+                data.writeInt(rect.left);
+                data.writeInt(rect.top);
+                data.writeInt(rect.width());
+                data.writeInt(rect.height());
+                mDaemonBinder.transact(MirrorDaemon.TRANSACT_ATTACH_SLOT, data, reply, 0);
                 reply.readException();
-                int ok = reply.readInt();
-                if (ok != 1) throw new RuntimeException("CLUSTER_ATTACH ok=0");
-                Surface clusterSurface = reply.readParcelable(Surface.class.getClassLoader());
-                mVdDisplayId = reply.readInt();           // VD display ID from daemon
-                mVdLayerStack = mVdDisplayId;             // on AOSP API 29 layerStack == displayId
-                AppLogger.d(TAG, "CLUSTER_ATTACH OK surface=" + clusterSurface
-                        + " displayId=" + mVdDisplayId);
-                if (mVdDisplayId < 0) throw new RuntimeException("CLUSTER_ATTACH: invalid displayId");
-            } finally {
-                data.recycle();
-                reply.recycle();
-            }
+                if (reply.readInt() != 1) throw new RuntimeException("ATTACH_SLOT failed");
+                reply.readParcelable(Surface.class.getClassLoader()); // surface (unused client-side)
+                displayId = reply.readInt();
+                if (displayId < 0) throw new RuntimeException("ATTACH_SLOT: invalid displayId");
+                AppLogger.d(TAG, "ATTACH_SLOT OK pkg=" + pkg + " displayId=" + displayId);
+            } finally { data.recycle(); reply.recycle(); }
         }
 
-        // Applique les marges si configurées (resize avant le lancement de l'app)
-        if (mMarginTop != 0 || mMarginBottom != 0 || mMarginLeft != 0 || mMarginRight != 0) {
-            sendResizeOverlay(mMarginLeft, mMarginTop,
-                    CLUSTER_W - mMarginLeft - mMarginRight,
-                    CLUSTER_H - mMarginTop - mMarginBottom);
-            Thread.sleep(100); // laisse le temps au daemon d'appliquer
-        }
-
-        // Step 4 skipped — VD is owned and managed by the daemon (MIRROR_STOP releases it).
-
-        // Step 5 — Launch target app on VD
-        // Strategy (OpenBYD launchAndForce pattern):
-        //   1) Daemon resolves component and does "am start -n <comp>" on display 0.
-        //      Launching on display 0 bypasses ATMS canPlaceEntityOnDisplay() which would
-        //      reject apps like Waze ("cannot be launched on secondary screens").
-        //   2) Daemon polls task ID via IActivityTaskManager.getTasks().
-        //   3) Daemon calls moveRootTaskToDisplay(taskId, displayId) — uid=2000 is exempt
-        //      from hidden-API restrictions, unlike the app process.
-        //   4) Daemon calls setFocusedTask(taskId).
-        //
-        // Do NOT use am start --display: it triggers the canPlaceEntityOnDisplay check
-        // before launch, which Waze fails.
-        final String pkg = targetPkg;
+        // Step 4 — LAUNCH_AND_FORCE → lance l'app sur ce VD
         safeRun(() -> setStatus(getString(R.string.projection_status_step_launch, pkg)));
         {
-            Parcel lafData  = Parcel.obtain();
-            Parcel lafReply = Parcel.obtain();
+            Parcel data = Parcel.obtain(), reply = Parcel.obtain();
             try {
-                lafData.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
-                lafData.writeString(pkg);
-                lafData.writeInt(mVdDisplayId);
-                lafData.writeInt(CLUSTER_W);
-                lafData.writeInt(CLUSTER_H);
-                mDaemonBinder.transact(MirrorDaemon.TRANSACT_LAUNCH_AND_FORCE, lafData, lafReply, 0);
-                lafReply.readException();
-                String lafLog = lafReply.readString();
-                AppLogger.d(TAG, "LAUNCH_AND_FORCE: " + lafLog);
-                if (!lafLog.startsWith("OK")) {
-                    throw new RuntimeException("LAUNCH_AND_FORCE: " + lafLog);
-                }
-            } finally {
-                lafData.recycle();
-                lafReply.recycle();
-            }
+                data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                data.writeString(pkg);
+                data.writeInt(displayId);
+                data.writeInt(rect.width());
+                data.writeInt(rect.height());
+                mDaemonBinder.transact(MirrorDaemon.TRANSACT_LAUNCH_AND_FORCE, data, reply, 0);
+                reply.readException();
+                String log = reply.readString();
+                AppLogger.d(TAG, "LAUNCH_AND_FORCE: " + log);
+                if (!log.startsWith("OK")) throw new RuntimeException("LAUNCH_AND_FORCE: " + log);
+            } finally { data.recycle(); reply.recycle(); }
         }
 
-        // Step 6 — MIRROR_START → SurfaceView preview tablette
-        safeRun(() -> setStatus(getString(R.string.projection_status_step_mirror)));
-        Surface tabletSurface = mHolder.getSurface();
-        // Utilise les dimensions réelles du SurfaceView pour la projection dest rect.
-        // SurfaceFlinger mappe src(0,0,1920×720) → dest(0,0,svW×svH).
-        // Le touch forwarding utilise ces mêmes dimensions pour le scaling inverse.
-        int svW = svPreview.getWidth();
-        int svH = svPreview.getHeight();
-        if (svW <= 0 || svH <= 0) { svW = CLUSTER_W; svH = CLUSTER_H; }
-        AppLogger.d(TAG, "MIRROR_START preview=" + svW + "×" + svH);
-        Parcel mData  = Parcel.obtain();
-        Parcel mReply = Parcel.obtain();
-        try {
-            mData.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
-            mData.writeInt(mVdLayerStack);
-            mData.writeInt(CLUSTER_W);
-            mData.writeInt(CLUSTER_H);
-            mData.writeInt(mVdDisplayId);
-            mData.writeInt(svW);
-            mData.writeInt(svH);
-            mData.writeParcelable(tabletSurface, 0);
-            mDaemonBinder.transact(MirrorDaemon.TRANSACT_MIRROR_START, mData, mReply, 0);
-            mReply.readException();
-            int ok = mReply.readInt();
-            AppLogger.d(TAG, "MIRROR_START reply ok=" + ok);
-            mMirrorReady = (ok == 1);
-        } finally {
-            mData.recycle();
-            mReply.recycle();
+        // Step 5 — MIRROR_START sur le premier slot (nav) pour la preview tablette
+        if (isFirst) {
+            safeRun(() -> setStatus(getString(R.string.projection_status_step_mirror)));
+            int svW = svPreview.getWidth(), svH = svPreview.getHeight();
+            if (svW <= 0 || svH <= 0) { svW = CLUSTER_W; svH = CLUSTER_H; }
+            Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+            try {
+                data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                data.writeInt(displayId); // layerStack == displayId on API 29
+                data.writeInt(rect.width());
+                data.writeInt(rect.height());
+                data.writeInt(displayId);
+                data.writeInt(svW);
+                data.writeInt(svH);
+                data.writeParcelable(mHolder.getSurface(), 0);
+                mDaemonBinder.transact(MirrorDaemon.TRANSACT_MIRROR_START, data, reply, 0);
+                reply.readException();
+                mMirrorReady = (reply.readInt() == 1);
+                // Mise à jour des champs legacy pour le touch forwarding
+                mVdDisplayId  = displayId;
+                mVdLayerStack = displayId;
+            } finally { data.recycle(); reply.recycle(); }
         }
 
-        // Done
-        final String runningPkg = targetPkg;
-        mProjecting = true;
+        // Enregistre le slot côté client
+        SlotState slot = new SlotState(pkg, label, displayId, new Rect(rect));
+        mSlots.put(pkg, slot);
+        mProjecting = !mSlots.isEmpty();
+
         safeRun(() -> {
-            setStatus(getString(R.string.projection_status_running, runningPkg));
-            btnStart.setEnabled(false);
-            btnStop.setEnabled(true);
+            updateSlotsStatus();
+            btnStart.setEnabled(mSurfaceReady && mSlots.size() < 2);
+            btnStop.setEnabled(!mSlots.isEmpty());
         });
     }
 
@@ -393,9 +491,63 @@ public class Dl3ProjectionActivity extends Activity {
         });
     }
 
+    /** Libère un slot individuel (sans stopper les autres). */
+    private void releaseSlot(String pkg) {
+        mExec.execute(() -> {
+            if (mDaemonBinder != null) {
+                Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+                try {
+                    data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                    data.writeString(pkg);
+                    mDaemonBinder.transact(MirrorDaemon.TRANSACT_RELEASE_SLOT, data, reply, 0);
+                    reply.readException();
+                } catch (Exception e) { AppLogger.e(TAG, "RELEASE_SLOT error", e); }
+                finally { data.recycle(); reply.recycle(); }
+            }
+            mSlots.remove(pkg);
+            mProjecting = !mSlots.isEmpty();
+            safeRun(() -> {
+                updateSlotsStatus();
+                btnStart.setEnabled(mSurfaceReady && mSlots.size() < 2);
+                btnStop.setEnabled(!mSlots.isEmpty());
+            });
+        });
+    }
+
+    /** Passe un slot en plein écran : libère les autres, resize ce slot. */
+    private void fullscreenSlot(String pkg) {
+        SlotState slot = mSlots.get(pkg);
+        if (slot == null) return;
+        // Libère les autres slots
+        for (String other : new ArrayList<>(mSlots.keySet())) {
+            if (!other.equals(pkg)) releaseSlot(other);
+        }
+        // Resize vers plein écran effectif
+        Rect full = effectiveRect();
+        saveRect(pkg, full);
+        sendResizeOverlay(full.left, full.top, full.width(), full.height());
+        slot.rect = full;
+        safeRun(this::updateSlotsStatus);
+    }
+
+    /** Met à jour le texte de statut avec la liste des slots actifs. */
+    private void updateSlotsStatus() {
+        if (mSlots.isEmpty()) {
+            setStatus(getString(R.string.projection_status_idle));
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        for (SlotState s : mSlots.values()) {
+            if (sb.length() > 0) sb.append("  |  ");
+            sb.append(s.label).append(" [").append(s.rect.width()).append("×").append(s.rect.height()).append("]");
+        }
+        setStatus(sb.toString());
+    }
+
     private void stopProjectionInternal() {
         mProjecting = false;
         mMirrorReady = false;
+        mSlots.clear();
         // MIRROR_STOP
         if (mDaemonBinder != null) {
             Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
@@ -494,7 +646,7 @@ public class Dl3ProjectionActivity extends Activity {
                     mMarginLeft   = sbLeft.getProgress();
                     mMarginRight  = sbRight.getProgress();
                     // Persist
-                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                    getSharedPreferences(PREFS_SIZING, Context.MODE_PRIVATE).edit()
                             .putInt(PREF_TOP,    mMarginTop)
                             .putInt(PREF_BOTTOM, mMarginBottom)
                             .putInt(PREF_LEFT,   mMarginLeft)

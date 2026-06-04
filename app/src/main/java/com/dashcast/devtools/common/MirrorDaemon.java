@@ -136,36 +136,78 @@ public final class MirrorDaemon {
      * Reply: writeNoException() + writeInt(1) on success, writeInt(0) on failure.
      */
     public static final int TRANSACT_RESIZE_OVERLAY = 8;
+    /**
+     * TRANSACT 9 — create a named overlay+VD slot for one app at a given rect.
+     * Wire: writeInterfaceToken + writeString(pkg) + writeInt(x) + writeInt(y)
+     *       + writeInt(w) + writeInt(h).
+     * Reply: writeNoException() + writeInt(1) + writeParcelable(surface) + writeInt(displayId)
+     *        or writeInt(0) on failure.
+     */
+    public static final int TRANSACT_ATTACH_SLOT = 9;
+    /**
+     * TRANSACT 10 — release one named slot (overlay + VD) without stopping others.
+     * Wire: writeInterfaceToken + writeString(pkg).
+     * Reply: writeNoException() + writeInt(1).
+     */
+    public static final int TRANSACT_RELEASE_SLOT = 10;
+
+    // ── SlotInfo — one overlay+VD pair per running app ───────────────────────
+
+    private static final class SlotInfo {
+        final String pkg;
+        int x, y, w, h;
+        View overlayView;
+        WindowManager overlayWM;
+        VirtualDisplay vd;
+        int displayId;
+
+        SlotInfo(String pkg, int x, int y, int w, int h) {
+            this.pkg = pkg; this.x = x; this.y = y; this.w = w; this.h = h;
+        }
+
+        void release() {
+            if (vd != null) {
+                try { vd.release(); log("slot[" + pkg + "] VD released"); }
+                catch (Exception e) { log("slot[" + pkg + "] VD release error: " + e.getMessage()); }
+                vd = null;
+            }
+            final View view = overlayView;
+            final WindowManager wm = overlayWM;
+            overlayView = null; overlayWM = null;
+            if (view != null && wm != null) {
+                Runnable r = () -> {
+                    try { wm.removeViewImmediate(view); log("slot[" + pkg + "] overlay removed"); }
+                    catch (Exception e) { log("slot[" + pkg + "] overlay remove error: " + e.getMessage()); }
+                };
+                if (Looper.myLooper() == Looper.getMainLooper()) r.run();
+                else new android.os.Handler(Looper.getMainLooper()).post(r);
+            }
+        }
+    }
+
+    /** Active slots — one per app currently projected on the cluster. */
+    private static final java.util.concurrent.ConcurrentHashMap<String, SlotInfo> sSlots =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     // ── Daemon state ────────────────────────────────────────────────────────
 
     /** Active display mirror token (created by MIRROR_START, released by MIRROR_STOP). */
     private static volatile IBinder sMirrorToken = null;
-    /** Active cluster overlay SurfaceView host (TYPE_SYSTEM_OVERLAY on displayId=1). */
+    /** Overlay+VD for CLUSTER_ATTACH (legacy single-slot, pkg="__default__"). */
     private static volatile View sClusterOverlayView = null;
-    /** Display-scoped window manager that owns {@link #sClusterOverlayView}. */
     private static volatile WindowManager sClusterOverlayWindowManager = null;
-    /**
-     * Display id of the VirtualDisplay where the app runs — set by MIRROR_START,
-     * used by INJECT_MOTION (same pattern as production MirrorDaemon).
-     */
+    private static volatile VirtualDisplay sVirtualDisplay = null;
+
+    /** displayId used by INJECT_MOTION — last display set by MIRROR_START. */
     private static volatile int sClusterDisplayId = -1;
 
     // InputManager reflection — initialised once in main(), reused on every event.
     private static volatile Object sInputManager   = null;
     private static volatile Method sInjectMethod   = null;
-    private static volatile Method sSetDisplayId   = null;  // MotionEvent.setDisplayId — may be null
+    private static volatile Method sSetDisplayId   = null;
 
-    // Context used to call DisplayManager.createVirtualDisplay() (OpenBYD approach).
-    // Obtained via ActivityThread.currentActivityThread() + createPackageContext("com.android.shell", 0).
-    // Shell uid=2000 owns "com.android.shell" → validatePackageName() passes.
-    private static volatile Context        sContext       = null;
-    // Raw system context (ActivityThread.getSystemContext()) — has framework Resources loaded,
-    // unlike sContext (createPackageContext in systemMain mode has no app resources).
-    // Used exclusively where View construction requires a valid getResources() call.
-    private static volatile Context        sSysContext    = null;
-    /** Active VirtualDisplay — created by TRANSACT_CREATE_VD, released by MIRROR_STOP. */
-    private static volatile VirtualDisplay sVirtualDisplay = null;
+    private static volatile Context sContext    = null;
+    private static volatile Context sSysContext = null;
 
     // ── Entry point ─────────────────────────────────────────────────────────
 
@@ -216,6 +258,8 @@ public final class MirrorDaemon {
                 case TRANSACT_CREATE_VD:          return handleCreateVd(data, reply);
                 case TRANSACT_LAUNCH_AND_FORCE:    return handleLaunchAndForce(data, reply);
                 case TRANSACT_RESIZE_OVERLAY:      return handleResizeOverlay(data, reply);
+                case TRANSACT_ATTACH_SLOT:         return handleAttachSlot(data, reply);
+                case TRANSACT_RELEASE_SLOT:        return handleReleaseSlot(data, reply);
                 default: return super.onTransact(code, data, reply, flags);
             }
         }
@@ -298,6 +342,10 @@ public final class MirrorDaemon {
             try { scDestroyDisplay(sMirrorToken); } catch (Exception ignored) {}
             sMirrorToken = null;
         }
+        // Release all named slots (multi-app)
+        for (SlotInfo slot : sSlots.values()) slot.release();
+        sSlots.clear();
+        // Release legacy single slot
         releaseClusterOverlay();
         if (sVirtualDisplay != null) {
             try { sVirtualDisplay.release(); log("VD released"); }
@@ -1250,6 +1298,155 @@ public final class MirrorDaemon {
             }
         }
         return null;
+    }
+
+    private static boolean handleAttachSlot(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        String pkg = data.readString();
+        int x = data.readInt(), y = data.readInt();
+        int w = data.readInt(), h = data.readInt();
+        log("ATTACH_SLOT pkg=" + pkg + " (" + x + "," + y + "," + w + "×" + h + ")");
+
+        // Release existing slot for this pkg if any
+        SlotInfo existing = sSlots.remove(pkg);
+        if (existing != null) existing.release();
+
+        SlotInfo slot = new SlotInfo(pkg, x, y, w, h);
+
+        // Create overlay at (x, y, w, h) on cluster display
+        Surface surface = tryAttachSlotOverlay(slot);
+        if (surface == null) {
+            log("ATTACH_SLOT: overlay failed for " + pkg);
+            reply.writeNoException(); reply.writeInt(0); return true;
+        }
+
+        // Create TRUSTED VD with overlay surface
+        int displayId = createTrustedVdForSlot(slot, surface);
+        if (displayId < 0) {
+            log("ATTACH_SLOT: VD failed for " + pkg);
+            slot.release();
+            reply.writeNoException(); reply.writeInt(0); return true;
+        }
+
+        sSlots.put(pkg, slot);
+        log("ATTACH_SLOT: OK pkg=" + pkg + " displayId=" + displayId);
+        reply.writeNoException();
+        reply.writeInt(1);
+        reply.writeParcelable(surface, 0);
+        reply.writeInt(displayId);
+        return true;
+    }
+
+    private static boolean handleReleaseSlot(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        String pkg = data.readString();
+        log("RELEASE_SLOT pkg=" + pkg);
+        SlotInfo slot = sSlots.remove(pkg);
+        if (slot != null) slot.release();
+        reply.writeNoException();
+        reply.writeInt(1);
+        return true;
+    }
+
+    /** Creates an overlay SurfaceView at the slot's rect on the cluster display. */
+    private static Surface tryAttachSlotOverlay(SlotInfo slot) {
+        try {
+            Display target = resolveClusterDisplay(1);
+            if (target == null) return null;
+
+            CountDownLatch latch = new CountDownLatch(1);
+            AtomicReference<Surface> surfaceRef = new AtomicReference<>();
+
+            Runnable attach = () -> {
+                try {
+                    Context base = (sSysContext != null) ? sSysContext : sContext;
+                    Context displayCtx = base.createDisplayContext(target);
+                    boolean hasRes = displayCtx != null && displayCtx.getResources() != null;
+                    Context viewCtx = hasRes ? displayCtx : base;
+
+                    // AppOps grant (needed as safety net)
+                    try {
+                        Object appOps = sContext.getSystemService(Context.APP_OPS_SERVICE);
+                        Method setMode = appOps.getClass().getMethod(
+                                "setMode", int.class, int.class, String.class, int.class);
+                        setMode.setAccessible(true);
+                        setMode.invoke(appOps, 24, android.os.Process.myUid(),
+                                sContext.getPackageName(), 0);
+                    } catch (Exception ignored) {}
+
+                    SurfaceView sv = new SurfaceView(viewCtx);
+                    sv.getHolder().setFixedSize(slot.w, slot.h);
+                    sv.getHolder().addCallback(new SurfaceHolder.Callback() {
+                        @Override public void surfaceCreated(SurfaceHolder h) {
+                            Surface s = h.getSurface();
+                            if (s != null && s.isValid()) {
+                                surfaceRef.compareAndSet(null, s);
+                                latch.countDown();
+                            }
+                        }
+                        @Override public void surfaceChanged(SurfaceHolder h, int f, int w2, int h2) {
+                            Surface s = h.getSurface();
+                            if (s != null && s.isValid()) surfaceRef.compareAndSet(null, s);
+                            latch.countDown();
+                        }
+                        @Override public void surfaceDestroyed(SurfaceHolder h) {}
+                    });
+
+                    WindowManager.LayoutParams lp = createOverlayLayoutParams(target, slot.w, slot.h);
+                    lp.x = slot.x; lp.y = slot.y;
+
+                    WindowManager wm = (displayCtx != null)
+                            ? displayCtx.getSystemService(WindowManager.class) : null;
+                    if (wm == null) throw new RuntimeException("WM null for slot " + slot.pkg);
+                    wm.addView(sv, lp);
+                    slot.overlayView = sv;
+                    slot.overlayWM = wm;
+                    log("ATTACH_SLOT overlay added pkg=" + slot.pkg
+                            + " at (" + slot.x + "," + slot.y + "," + slot.w + "×" + slot.h + ")");
+                } catch (Exception e) {
+                    log("ATTACH_SLOT overlay error: " + e.getMessage());
+                    latch.countDown();
+                }
+            };
+
+            if (Looper.myLooper() == Looper.getMainLooper()) attach.run();
+            else new android.os.Handler(Looper.getMainLooper()).post(attach);
+
+            if (!latch.await(2, TimeUnit.SECONDS)) {
+                log("ATTACH_SLOT overlay timeout for " + slot.pkg);
+                return null;
+            }
+            return surfaceRef.get();
+        } catch (Exception e) {
+            log("ATTACH_SLOT overlay exception: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** Creates a TRUSTED VirtualDisplay for the given slot. */
+    private static int createTrustedVdForSlot(SlotInfo slot, Surface surface) {
+        try {
+            DisplayManager dm = sContext.getSystemService(DisplayManager.class);
+            VirtualDisplay vd = null;
+            try {
+                vd = dm.createVirtualDisplay(
+                        "devtools_slot_" + slot.pkg, slot.w, slot.h, 160, surface, 1346);
+                if (vd != null) log("ATTACH_SLOT VD TRUSTED OK pkg=" + slot.pkg);
+            } catch (Exception e) {
+                log("ATTACH_SLOT VD TRUSTED failed, fallback 322: " + e.getMessage());
+            }
+            if (vd == null) {
+                vd = dm.createVirtualDisplay(
+                        "devtools_slot_" + slot.pkg, slot.w, slot.h, 160, surface, 322);
+            }
+            if (vd == null) return -1;
+            slot.vd = vd;
+            slot.displayId = vd.getDisplay().getDisplayId();
+            return slot.displayId;
+        } catch (Exception e) {
+            log("ATTACH_SLOT VD error: " + e.getMessage());
+            return -1;
+        }
     }
 
     private static boolean handleResizeOverlay(Parcel data, Parcel reply) {
