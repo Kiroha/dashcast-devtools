@@ -130,6 +130,12 @@ public final class MirrorDaemon {
      * bypasses that check.  uid=2000 (shell) is exempt from hidden-API restrictions.
      */
     public static final int TRANSACT_LAUNCH_AND_FORCE = 7;
+    /**
+     * TRANSACT 8 — resize the cluster overlay and VirtualDisplay in-place.
+     * Wire: writeInterfaceToken + writeInt(x) + writeInt(y) + writeInt(w) + writeInt(h).
+     * Reply: writeNoException() + writeInt(1) on success, writeInt(0) on failure.
+     */
+    public static final int TRANSACT_RESIZE_OVERLAY = 8;
 
     // ── Daemon state ────────────────────────────────────────────────────────
 
@@ -209,6 +215,7 @@ public final class MirrorDaemon {
                 case TRANSACT_INJECT_MOTION:  return handleInjectMotion(data, reply);
                 case TRANSACT_CREATE_VD:          return handleCreateVd(data, reply);
                 case TRANSACT_LAUNCH_AND_FORCE:    return handleLaunchAndForce(data, reply);
+                case TRANSACT_RESIZE_OVERLAY:      return handleResizeOverlay(data, reply);
                 default: return super.onTransact(code, data, reply, flags);
             }
         }
@@ -1217,7 +1224,7 @@ public final class MirrorDaemon {
         }
         log("CLUSTER_ATTACH overlay params type=" + overlayType
                 + " size=" + w + "×" + h
-                + " targetDisplay=" + targetDisplay.getDisplayId()
+                + (targetDisplay != null ? " targetDisplay=" + targetDisplay.getDisplayId() : "")
                 + " pkg=" + lp.packageName);
         return lp;
     }
@@ -1243,6 +1250,55 @@ public final class MirrorDaemon {
             }
         }
         return null;
+    }
+
+    private static boolean handleResizeOverlay(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        final int x = data.readInt();
+        final int y = data.readInt();
+        final int w = data.readInt();
+        final int h = data.readInt();
+        log("RESIZE_OVERLAY x=" + x + " y=" + y + " w=" + w + " h=" + h);
+
+        if (sClusterOverlayView == null || sClusterOverlayWindowManager == null
+                || sVirtualDisplay == null) {
+            log("RESIZE_OVERLAY: no active overlay/VD — ignored");
+            reply.writeNoException();
+            reply.writeInt(0);
+            return true;
+        }
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        new android.os.Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                WindowManager.LayoutParams lp = createOverlayLayoutParams(null, w, h);
+                lp.x = x;
+                lp.y = y;
+                lp.width  = w;
+                lp.height = h;
+                sClusterOverlayWindowManager.updateViewLayout(sClusterOverlayView, lp);
+                SurfaceView sv = (SurfaceView) sClusterOverlayView;
+                sv.getHolder().setFixedSize(w, h);
+                log("RESIZE_OVERLAY: overlay updated");
+            } catch (Exception e) {
+                log("RESIZE_OVERLAY overlay error: " + e.getMessage());
+            } finally {
+                latch.countDown();
+            }
+        });
+
+        try { latch.await(1, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+
+        try {
+            sVirtualDisplay.resize(w, h, 160);
+            log("RESIZE_OVERLAY: VD resized OK");
+        } catch (Exception e) {
+            log("RESIZE_OVERLAY VD error: " + e.getMessage());
+        }
+
+        reply.writeNoException();
+        reply.writeInt(1);
+        return true;
     }
 
     private static void releaseClusterOverlay() {

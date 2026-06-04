@@ -3,6 +3,7 @@ package com.dashcast.devtools.projection;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.hardware.display.DisplayManager;
@@ -14,11 +15,13 @@ import android.os.Looper;
 import android.os.Parcel;
 import android.util.DisplayMetrics;
 import android.view.Display;
+import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.view.View;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -84,6 +87,18 @@ public class Dl3ProjectionActivity extends Activity {
     // Touch mapping: set to true once MIRROR_START succeeds.
     private volatile boolean mMirrorReady = false;
 
+    // ── Overlay sizing (marges depuis chaque bord, persistées en SharedPrefs) ──
+    private static final String PREFS_NAME    = "overlay_sizing";
+    private static final String PREF_TOP      = "margin_top";
+    private static final String PREF_BOTTOM   = "margin_bottom";
+    private static final String PREF_LEFT     = "margin_left";
+    private static final String PREF_RIGHT    = "margin_right";
+    // Valeurs courantes — initialisées depuis SharedPrefs dans onCreate
+    private int mMarginTop    = 0;
+    private int mMarginBottom = 0;
+    private int mMarginLeft   = 0;
+    private int mMarginRight  = 0;
+
     private final Handler         mUiHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService mExec      = Executors.newSingleThreadExecutor();
 
@@ -94,8 +109,23 @@ public class Dl3ProjectionActivity extends Activity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_projection);
 
+        // Charge les marges sauvegardées
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+        mMarginTop    = prefs.getInt(PREF_TOP,    0);
+        mMarginBottom = prefs.getInt(PREF_BOTTOM, 0);
+        mMarginLeft   = prefs.getInt(PREF_LEFT,   0);
+        mMarginRight  = prefs.getInt(PREF_RIGHT,  0);
+
         MaterialToolbar toolbar = findViewById(R.id.toolbar_projection);
         toolbar.setNavigationOnClickListener(v -> finish());
+        toolbar.inflateMenu(R.menu.menu_projection);
+        toolbar.setOnMenuItemClickListener(item -> {
+            if (item.getItemId() == R.id.action_overlay_sizing) {
+                showOverlaySizingDialog();
+                return true;
+            }
+            return false;
+        });
 
         btnStart   = findViewById(R.id.btn_projection_start);
         btnStop    = findViewById(R.id.btn_projection_stop);
@@ -261,6 +291,14 @@ public class Dl3ProjectionActivity extends Activity {
             }
         }
 
+        // Applique les marges si configurées (resize avant le lancement de l'app)
+        if (mMarginTop != 0 || mMarginBottom != 0 || mMarginLeft != 0 || mMarginRight != 0) {
+            sendResizeOverlay(mMarginLeft, mMarginTop,
+                    CLUSTER_W - mMarginLeft - mMarginRight,
+                    CLUSTER_H - mMarginTop - mMarginBottom);
+            Thread.sleep(100); // laisse le temps au daemon d'appliquer
+        }
+
         // Step 4 skipped — VD is owned and managed by the daemon (MIRROR_STOP releases it).
 
         // Step 5 — Launch target app on VD
@@ -403,6 +441,98 @@ public class Dl3ProjectionActivity extends Activity {
     }
 
     // ── Touch forwarding ──────────────────────────────────────────────────────
+
+    // ── Overlay sizing dialog ─────────────────────────────────────────────────
+
+    private void showOverlaySizingDialog() {
+        View dialogView = LayoutInflater.from(this).inflate(R.layout.dialog_overlay_sizing, null);
+
+        SeekBar sbTop    = dialogView.findViewById(R.id.sb_margin_top);
+        SeekBar sbBottom = dialogView.findViewById(R.id.sb_margin_bottom);
+        SeekBar sbLeft   = dialogView.findViewById(R.id.sb_margin_left);
+        SeekBar sbRight  = dialogView.findViewById(R.id.sb_margin_right);
+        TextView tvTop    = dialogView.findViewById(R.id.tv_margin_top_val);
+        TextView tvBottom = dialogView.findViewById(R.id.tv_margin_bottom_val);
+        TextView tvLeft   = dialogView.findViewById(R.id.tv_margin_left_val);
+        TextView tvRight  = dialogView.findViewById(R.id.tv_margin_right_val);
+        TextView tvRect   = dialogView.findViewById(R.id.tv_overlay_rect);
+
+        // Max: 300px haut/bas, 500px gauche/droite
+        sbTop.setMax(300);    sbTop.setProgress(mMarginTop);
+        sbBottom.setMax(300); sbBottom.setProgress(mMarginBottom);
+        sbLeft.setMax(500);   sbLeft.setProgress(mMarginLeft);
+        sbRight.setMax(500);  sbRight.setProgress(mMarginRight);
+
+        Runnable updateRect = () -> {
+            int t = sbTop.getProgress(), b = sbBottom.getProgress();
+            int l = sbLeft.getProgress(), r = sbRight.getProgress();
+            tvTop.setText(t + " px");
+            tvBottom.setText(b + " px");
+            tvLeft.setText(l + " px");
+            tvRight.setText(r + " px");
+            int x = l, y = t, w = CLUSTER_W - l - r, h = CLUSTER_H - t - b;
+            tvRect.setText("Overlay : x=" + x + " y=" + y + "  " + w + "×" + h + " px");
+        };
+        updateRect.run();
+
+        SeekBar.OnSeekBarChangeListener listener = new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar s, int v, boolean u) { updateRect.run(); }
+            @Override public void onStartTrackingTouch(SeekBar s) {}
+            @Override public void onStopTrackingTouch(SeekBar s) {}
+        };
+        sbTop.setOnSeekBarChangeListener(listener);
+        sbBottom.setOnSeekBarChangeListener(listener);
+        sbLeft.setOnSeekBarChangeListener(listener);
+        sbRight.setOnSeekBarChangeListener(listener);
+
+        new AlertDialog.Builder(this)
+                .setTitle("Ajustement de l'overlay cluster")
+                .setView(dialogView)
+                .setPositiveButton("Appliquer", (d, w) -> {
+                    mMarginTop    = sbTop.getProgress();
+                    mMarginBottom = sbBottom.getProgress();
+                    mMarginLeft   = sbLeft.getProgress();
+                    mMarginRight  = sbRight.getProgress();
+                    // Persist
+                    getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+                            .putInt(PREF_TOP,    mMarginTop)
+                            .putInt(PREF_BOTTOM, mMarginBottom)
+                            .putInt(PREF_LEFT,   mMarginLeft)
+                            .putInt(PREF_RIGHT,  mMarginRight)
+                            .apply();
+                    // Resize en live si projection active
+                    if (mProjecting && mDaemonBinder != null) {
+                        sendResizeOverlay(mMarginLeft, mMarginTop,
+                                CLUSTER_W - mMarginLeft - mMarginRight,
+                                CLUSTER_H - mMarginTop - mMarginBottom);
+                    }
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    private void sendResizeOverlay(int x, int y, int w, int h) {
+        mExec.execute(() -> {
+            Parcel data  = Parcel.obtain();
+            Parcel reply = Parcel.obtain();
+            try {
+                data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                data.writeInt(x);
+                data.writeInt(y);
+                data.writeInt(w);
+                data.writeInt(h);
+                mDaemonBinder.transact(MirrorDaemon.TRANSACT_RESIZE_OVERLAY, data, reply, 0);
+                reply.readException();
+                int ok = reply.readInt();
+                AppLogger.d(TAG, "RESIZE_OVERLAY reply ok=" + ok + " rect=(" + x + "," + y + "," + w + "×" + h + ")");
+            } catch (Exception e) {
+                AppLogger.e(TAG, "RESIZE_OVERLAY error", e);
+            } finally {
+                data.recycle();
+                reply.recycle();
+            }
+        });
+    }
 
     /**
      * Mappe les coordonnées touch du SurfaceView preview (viewW×viewH) vers l'espace
