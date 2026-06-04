@@ -1220,20 +1220,27 @@ public final class MirrorDaemon {
                     });
 
                     // ── Step D: add view to the cluster display via WindowManager ────────
-                    // Prefer the display-scoped WindowManager (standard API 29 path: the
-                    // WindowManagerImpl bound to displayCtx routes addView to targetDisplay).
-                    // If displayCtx is unavailable, fall back to WindowManagerGlobal
-                    // reflection which accepts an explicit Display parameter.
+                    // Try TYPE_SYSTEM_OVERLAY first (bypasses AppOps, mPolicyVisibility=true).
+                    // Fall back to TYPE_APPLICATION_OVERLAY if INTERNAL_SYSTEM_WINDOW is denied
+                    // for uid=2000 on this ROM.
                     WindowManager.LayoutParams lp = createOverlayLayoutParams(targetDisplay, w, h);
                     WindowManager wm = (displayCtx != null)
                             ? displayCtx.getSystemService(WindowManager.class) : null;
                     if (wm != null) {
-                        log("CLUSTER_ATTACH overlay: addView via display-scoped WM");
-                        wm.addView(surfaceView, lp);
-                        sClusterOverlayWindowManager = wm;
+                        try {
+                            log("CLUSTER_ATTACH overlay: addView type=" + lp.type + " via display-scoped WM");
+                            wm.addView(surfaceView, lp);
+                            sClusterOverlayWindowManager = wm;
+                            log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
+                        } catch (SecurityException se) {
+                            log("CLUSTER_ATTACH overlay: type=" + lp.type + " denied (" + se.getMessage() + "), retrying TYPE_APPLICATION_OVERLAY");
+                            lp = createOverlayLayoutParamsFallback(targetDisplay, w, h);
+                            wm.addView(surfaceView, lp);
+                            sClusterOverlayWindowManager = wm;
+                            log("CLUSTER_ATTACH overlay host added (fallback) on displayId=" + targetDisplay.getDisplayId());
+                        }
                     } else {
                         // WindowManagerGlobal.addView(view, params, display, parentWindow)
-                        // is the @hide API that WindowManagerImpl.addView() delegates to.
                         log("CLUSTER_ATTACH overlay: addView via WindowManagerGlobal (wm was null)");
                         Class<?> wmgCls = Class.forName("android.view.WindowManagerGlobal");
                         Object wmg = wmgCls.getMethod("getInstance").invoke(null);
@@ -1243,9 +1250,9 @@ public final class MirrorDaemon {
                         wmgAdd.setAccessible(true);
                         wmgAdd.invoke(wmg, surfaceView, lp, targetDisplay, null);
                         sClusterOverlayWindowManager = sContext.getSystemService(WindowManager.class);
+                        log("CLUSTER_ATTACH overlay host added (WMGlobal) on displayId=" + targetDisplay.getDisplayId());
                     }
                     sClusterOverlayView = surfaceView;
-                    log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
                 } catch (Exception e) {
                     errorRef.set(new RuntimeException(e));
                     latch.countDown();
@@ -1298,27 +1305,59 @@ public final class MirrorDaemon {
 
     private static WindowManager.LayoutParams createOverlayLayoutParams(
             Display targetDisplay, int w, int h) {
-        // TYPE_APPLICATION_OVERLAY (API 26+) is the correct type for a persistent
-        // system-managed overlay; TYPE_PHONE is the legacy equivalent on API < 26.
-        int overlayType = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE;
+        // On API 26+ try TYPE_SYSTEM_OVERLAY (2006) first: requires INTERNAL_SYSTEM_WINDOW
+        // (declared in manifest, granted by platform signature). Bypasses AppOps entirely
+        // so mPolicyVisibility is guaranteed true → performShowLocked fires.
+        // Fall back to TYPE_APPLICATION_OVERLAY (2038) if INTERNAL_SYSTEM_WINDOW is not
+        // granted for uid=2000 on this ROM (com.android.shell may not declare it).
+        int overlayType;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            overlayType = 2006; // TYPE_SYSTEM_OVERLAY — try first
+        } else {
+            overlayType = WindowManager.LayoutParams.TYPE_PHONE;
+        }
+
+        final int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
 
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                w, h,
-                overlayType,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                        | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
-                android.graphics.PixelFormat.OPAQUE);
+                w, h, overlayType, flags, android.graphics.PixelFormat.OPAQUE);
         lp.setTitle("devtools_cluster_overlay");
         lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
         lp.x = 0;
         lp.y = 0;
+        // Explicitly set packageName so WMS AppOps/permission check uses uid=2000 /
+        // "com.android.shell", matching our runtime AppOps grant.
+        if (sContext != null) {
+            lp.packageName = sContext.getPackageName(); // "com.android.shell"
+        }
         log("CLUSTER_ATTACH overlay params type=" + overlayType
                 + " size=" + w + "×" + h
-                + " targetDisplay=" + targetDisplay.getDisplayId());
+                + " targetDisplay=" + targetDisplay.getDisplayId()
+                + " pkg=" + lp.packageName);
+        return lp;
+    }
+
+    private static WindowManager.LayoutParams createOverlayLayoutParamsFallback(
+            Display targetDisplay, int w, int h) {
+        // TYPE_APPLICATION_OVERLAY fallback (used if TYPE_SYSTEM_OVERLAY is denied).
+        int overlayType = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
+                : WindowManager.LayoutParams.TYPE_PHONE;
+        final int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                w, h, overlayType, flags, android.graphics.PixelFormat.OPAQUE);
+        lp.setTitle("devtools_cluster_overlay");
+        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
+        lp.x = 0;
+        lp.y = 0;
+        if (sContext != null) lp.packageName = sContext.getPackageName();
+        log("CLUSTER_ATTACH overlay params fallback type=" + overlayType + " pkg=" + lp.packageName);
         return lp;
     }
 
