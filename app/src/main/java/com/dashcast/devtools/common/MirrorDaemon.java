@@ -850,7 +850,8 @@ public final class MirrorDaemon {
                     try {
                         for (int iter = 0; iter < 20; iter++) {
                             Thread.sleep(500);
-                            if (sVirtualDisplay == null) {
+                            // Abort si plus aucun VD actif (legacy ou named slots)
+                            if (sVirtualDisplay == null && sSlots.isEmpty()) {
                                 log("WATCHDOG: VD released (MIRROR_STOP), aborting");
                                 return;
                             }
@@ -1506,31 +1507,45 @@ public final class MirrorDaemon {
         final int h = data.readInt();
         log("RESIZE_OVERLAY x=" + x + " y=" + y + " w=" + w + " h=" + h);
 
-        if (sClusterOverlayView == null || sClusterOverlayWindowManager == null
-                || sVirtualDisplay == null) {
+        // Si les champs legacy sont vides mais qu'il y a des slots nommés,
+        // délègue au premier slot trouvé (cas ATTACH_SLOT).
+        if (sClusterOverlayView == null || sVirtualDisplay == null) {
+            if (!sSlots.isEmpty()) {
+                SlotInfo first = sSlots.values().iterator().next();
+                log("RESIZE_OVERLAY: delegating to slot[" + first.pkg + "]");
+                first.x = x; first.y = y; first.w = w; first.h = h;
+                final CountDownLatch latchS = new CountDownLatch(1);
+                new android.os.Handler(Looper.getMainLooper()).post(() -> {
+                    try {
+                        WindowManager.LayoutParams lp = createOverlayLayoutParams(null, w, h);
+                        lp.x = x; lp.y = y; lp.width = w; lp.height = h;
+                        first.overlayWM.updateViewLayout(first.overlayView, lp);
+                        ((SurfaceView) first.overlayView).getHolder().setFixedSize(w, h);
+                        log("RESIZE_OVERLAY slot overlay updated");
+                    } catch (Exception e) {
+                        log("RESIZE_OVERLAY slot overlay error: " + e.getMessage());
+                    } finally { latchS.countDown(); }
+                });
+                try { latchS.await(1, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+                try { first.vd.resize(w, h, 160); log("RESIZE_OVERLAY slot VD resized"); }
+                catch (Exception e) { log("RESIZE_OVERLAY slot VD error: " + e.getMessage()); }
+                reply.writeNoException(); reply.writeInt(1); return true;
+            }
             log("RESIZE_OVERLAY: no active overlay/VD — ignored");
-            reply.writeNoException();
-            reply.writeInt(0);
-            return true;
+            reply.writeNoException(); reply.writeInt(0); return true;
         }
 
         final CountDownLatch latch = new CountDownLatch(1);
         new android.os.Handler(Looper.getMainLooper()).post(() -> {
             try {
                 WindowManager.LayoutParams lp = createOverlayLayoutParams(null, w, h);
-                lp.x = x;
-                lp.y = y;
-                lp.width  = w;
-                lp.height = h;
+                lp.x = x; lp.y = y; lp.width = w; lp.height = h;
                 sClusterOverlayWindowManager.updateViewLayout(sClusterOverlayView, lp);
-                SurfaceView sv = (SurfaceView) sClusterOverlayView;
-                sv.getHolder().setFixedSize(w, h);
+                ((SurfaceView) sClusterOverlayView).getHolder().setFixedSize(w, h);
                 log("RESIZE_OVERLAY: overlay updated");
             } catch (Exception e) {
                 log("RESIZE_OVERLAY overlay error: " + e.getMessage());
-            } finally {
-                latch.countDown();
-            }
+            } finally { latch.countDown(); }
         });
 
         try { latch.await(1, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
