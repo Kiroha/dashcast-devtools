@@ -143,13 +143,20 @@ public final class MirrorDaemon {
      * Reply: writeNoException() + writeInt(1) + writeParcelable(surface) + writeInt(displayId)
      *        or writeInt(0) on failure.
      */
-    public static final int TRANSACT_ATTACH_SLOT = 9;
     /**
-     * TRANSACT 10 — release one named slot (overlay + VD) without stopping others.
+     * TRANSACT 9 — resize a named slot overlay+VD in-place.
+     * Wire: writeInterfaceToken + writeString(pkg) + writeInt(x) + writeInt(y)
+     *       + writeInt(w) + writeInt(h).
+     * Reply: writeNoException() + writeInt(1) on success, writeInt(0) on failure.
+     */
+    public static final int TRANSACT_RESIZE_SLOT = 9;
+    public static final int TRANSACT_ATTACH_SLOT = 10;
+    /**
+     * TRANSACT 11 — release one named slot (overlay + VD) without stopping others.
      * Wire: writeInterfaceToken + writeString(pkg).
      * Reply: writeNoException() + writeInt(1).
      */
-    public static final int TRANSACT_RELEASE_SLOT = 10;
+    public static final int TRANSACT_RELEASE_SLOT = 11;
 
     // ── SlotInfo — one overlay+VD pair per running app ───────────────────────
 
@@ -258,6 +265,7 @@ public final class MirrorDaemon {
                 case TRANSACT_CREATE_VD:          return handleCreateVd(data, reply);
                 case TRANSACT_LAUNCH_AND_FORCE:    return handleLaunchAndForce(data, reply);
                 case TRANSACT_RESIZE_OVERLAY:      return handleResizeOverlay(data, reply);
+                case TRANSACT_RESIZE_SLOT:         return handleResizeSlot(data, reply);
                 case TRANSACT_ATTACH_SLOT:         return handleAttachSlot(data, reply);
                 case TRANSACT_RELEASE_SLOT:        return handleReleaseSlot(data, reply);
                 default: return super.onTransact(code, data, reply, flags);
@@ -1298,6 +1306,47 @@ public final class MirrorDaemon {
             }
         }
         return null;
+    }
+
+    private static boolean handleResizeSlot(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        String pkg = data.readString();
+        int x = data.readInt(), y = data.readInt();
+        int w = data.readInt(), h = data.readInt();
+        log("RESIZE_SLOT pkg=" + pkg + " (" + x + "," + y + "," + w + "×" + h + ")");
+
+        SlotInfo slot = sSlots.get(pkg);
+        if (slot == null) {
+            log("RESIZE_SLOT: slot not found for " + pkg);
+            reply.writeNoException(); reply.writeInt(0); return true;
+        }
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        new android.os.Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                WindowManager.LayoutParams lp = createOverlayLayoutParams(null, w, h);
+                lp.x = x; lp.y = y; lp.width = w; lp.height = h;
+                slot.overlayWM.updateViewLayout(slot.overlayView, lp);
+                ((SurfaceView) slot.overlayView).getHolder().setFixedSize(w, h);
+                slot.x = x; slot.y = y; slot.w = w; slot.h = h;
+                log("RESIZE_SLOT overlay updated pkg=" + pkg);
+            } catch (Exception e) {
+                log("RESIZE_SLOT overlay error: " + e.getMessage());
+            } finally {
+                latch.countDown();
+            }
+        });
+        try { latch.await(1, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
+
+        try {
+            slot.vd.resize(w, h, 160);
+            log("RESIZE_SLOT VD resized pkg=" + pkg);
+        } catch (Exception e) {
+            log("RESIZE_SLOT VD error: " + e.getMessage());
+        }
+
+        reply.writeNoException(); reply.writeInt(1);
+        return true;
     }
 
     private static boolean handleAttachSlot(Parcel data, Parcel reply) {

@@ -559,6 +559,9 @@ public class Dl3ProjectionActivity extends Activity {
                     + "  " + slot.rect.width() + "×" + slot.rect.height()
                     + "  @(" + slot.rect.left + "," + slot.rect.top + ")");
 
+            MaterialButton btnResize = row.findViewById(R.id.btn_slot_resize);
+            btnResize.setOnClickListener(v -> showSlotResizeDialog(slot));
+
             MaterialButton btnFs = row.findViewById(R.id.btn_slot_fullscreen);
             btnFs.setEnabled(mSlots.size() > 1 || !slot.rect.equals(effectiveRect()));
             btnFs.setOnClickListener(v -> fullscreenSlot(slot.pkg));
@@ -692,6 +695,56 @@ public class Dl3ProjectionActivity extends Activity {
                 })
                 .setNegativeButton("Annuler", null)
                 .show();
+    }
+
+    private void showSlotResizeDialog(SlotState slot) {
+        Rect eff = effectiveRect();
+        int ew = eff.width(), eh = eff.height(), mx = eff.left, my = eff.top;
+
+        String[] names = {
+            "Plein écran",
+            "Gauche 1/2",  "Droite 1/2",
+            "Gauche 3/4",  "Droite 3/4",
+            "Gauche 1/4",  "Droite 1/4"
+        };
+        Rect[] rects = {
+            new Rect(mx,            my, mx + ew,       my + eh),
+            new Rect(mx,            my, mx + ew/2,     my + eh),
+            new Rect(mx + ew/2,     my, mx + ew,       my + eh),
+            new Rect(mx,            my, mx + ew*3/4,   my + eh),
+            new Rect(mx + ew/4,     my, mx + ew,       my + eh),
+            new Rect(mx,            my, mx + ew/4,     my + eh),
+            new Rect(mx + ew*3/4,   my, mx + ew,       my + eh)
+        };
+
+        new AlertDialog.Builder(this)
+                .setTitle("Redimensionner " + slot.label)
+                .setItems(names, (d, which) -> {
+                    Rect chosen = rects[which];
+                    saveRect(slot.pkg, chosen);
+                    slot.rect = new Rect(chosen);
+                    if (mDaemonBinder != null) sendResizeSlot(slot.pkg, chosen);
+                    safeRun(this::updateSlotsStatus);
+                })
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    private void sendResizeSlot(String pkg, Rect r) {
+        mExec.execute(() -> {
+            Parcel data = Parcel.obtain(), reply = Parcel.obtain();
+            try {
+                data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                data.writeString(pkg);
+                data.writeInt(r.left); data.writeInt(r.top);
+                data.writeInt(r.width()); data.writeInt(r.height());
+                mDaemonBinder.transact(MirrorDaemon.TRANSACT_RESIZE_SLOT, data, reply, 0);
+                reply.readException();
+                AppLogger.d(TAG, "RESIZE_SLOT pkg=" + pkg + " ok=" + reply.readInt());
+            } catch (Exception e) {
+                AppLogger.e(TAG, "RESIZE_SLOT error", e);
+            } finally { data.recycle(); reply.recycle(); }
+        });
     }
 
     private void sendResizeOverlay(int x, int y, int w, int h) {
