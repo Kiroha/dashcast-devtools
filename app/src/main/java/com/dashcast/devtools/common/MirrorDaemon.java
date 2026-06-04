@@ -984,15 +984,22 @@ public final class MirrorDaemon {
         int h          = data.readInt();
         log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h);
 
-        // The SurfaceView overlay succeeds on this ROM but its window sits at a normal WMS
-        // z-order, which places it UNDER the XDJA Qt VirtualDisplay that drives the physical
-        // cluster display.  The SurfaceControl buffer layer sets layer=Integer.MAX_VALUE-1 at
-        // the hardware compositor level — above everything including XDJA — and is therefore
-        // the only approach that guarantees visibility on the physical cluster.
-        //
-        // We still attempt the overlay for window lifecycle management (future input routing),
-        // but the VD output surface is ALWAYS the SurfaceControl layer.
-        tryAttachClusterOverlay(layerStack, w, h); // best-effort; result not used for VD
+        // OpenBYD 2.2 pattern: SurfaceView overlay on the cluster display (displayId=1),
+        // VirtualDisplay output surface = overlay surface, app renders into VD → shows on cluster.
+        Surface overlaySurface = tryAttachClusterOverlay(layerStack, w, h);
+        if (overlaySurface != null) {
+            int displayId = createAndStoreTrustedVd(overlaySurface, w, h);
+            if (displayId >= 0) {
+                log("CLUSTER_ATTACH: using overlay surface for VD displayId=" + displayId);
+                reply.writeNoException();
+                reply.writeInt(1);
+                reply.writeParcelable(overlaySurface, 0);
+                reply.writeInt(displayId);
+                return true;
+            }
+            log("CLUSTER_ATTACH: overlay surface OK but VD creation failed, falling back to SC");
+            releaseClusterOverlay();
+        }
 
         try {
             Class<?> scCls      = Class.forName("android.view.SurfaceControl");
