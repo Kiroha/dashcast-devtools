@@ -81,11 +81,8 @@ public class Dl3ProjectionActivity extends Activity {
     private int             mVdDisplayId  = -1;
     private int             mVdLayerStack = -1;
 
-    // Projection mapping — letterbox parameters from MIRROR_START, used by forwardTouch.
-    // Same formula as production ClusterMirrorManager: scale = min(viewW/CW, viewH/CH).
-    private int   mProjOffsetX = 0;
-    private int   mProjOffsetY = 0;
-    private float mProjScale   = 0f;  // 0 = not yet set
+    // Touch mapping: set to true once MIRROR_START succeeds.
+    private volatile boolean mMirrorReady = false;
 
     private final Handler         mUiHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService mExec      = Executors.newSingleThreadExecutor();
@@ -124,9 +121,9 @@ public class Dl3ProjectionActivity extends Activity {
             }
         });
 
-        // Touch forwarding — scale from view coords to cluster coords
+        // Touch forwarding — linéaire : coordonnées view → coordonnées cluster (1920×720)
         svPreview.setOnTouchListener((v, event) -> {
-            if (!mProjecting || mDaemonBinder == null || mVdDisplayId < 0) return false;
+            if (!mProjecting || !mMirrorReady || mDaemonBinder == null || mVdDisplayId < 0) return false;
             forwardTouch(event, v.getWidth(), v.getHeight());
             return true;
         });
@@ -302,9 +299,16 @@ public class Dl3ProjectionActivity extends Activity {
             }
         }
 
-        // Step 6 — MIRROR_START → tablet SurfaceView preview
+        // Step 6 — MIRROR_START → SurfaceView preview tablette
         safeRun(() -> setStatus(getString(R.string.projection_status_step_mirror)));
         Surface tabletSurface = mHolder.getSurface();
+        // Utilise les dimensions réelles du SurfaceView pour la projection dest rect.
+        // SurfaceFlinger mappe src(0,0,1920×720) → dest(0,0,svW×svH).
+        // Le touch forwarding utilise ces mêmes dimensions pour le scaling inverse.
+        int svW = svPreview.getWidth();
+        int svH = svPreview.getHeight();
+        if (svW <= 0 || svH <= 0) { svW = CLUSTER_W; svH = CLUSTER_H; }
+        AppLogger.d(TAG, "MIRROR_START preview=" + svW + "×" + svH);
         Parcel mData  = Parcel.obtain();
         Parcel mReply = Parcel.obtain();
         try {
@@ -313,23 +317,14 @@ public class Dl3ProjectionActivity extends Activity {
             mData.writeInt(CLUSTER_W);
             mData.writeInt(CLUSTER_H);
             mData.writeInt(mVdDisplayId);
-            mData.writeInt(CLUSTER_W);
-            mData.writeInt(CLUSTER_H);
+            mData.writeInt(svW);
+            mData.writeInt(svH);
             mData.writeParcelable(tabletSurface, 0);
             mDaemonBinder.transact(MirrorDaemon.TRANSACT_MIRROR_START, mData, mReply, 0);
             mReply.readException();
             int ok = mReply.readInt();
             AppLogger.d(TAG, "MIRROR_START reply ok=" + ok);
-
-            // Compute and store letterbox projection params for touch mapping.
-            // Must mirror the formula in MirrorDaemon.handleMirrorStart (src=1920×720 → view=1920×720
-            // → scale=1, offsets=0 for our full-size SurfaceView; stored anyway for correctness).
-            float scale   = Math.min((float) CLUSTER_W / CLUSTER_W, (float) CLUSTER_H / CLUSTER_H);
-            int   drawW   = (int) (CLUSTER_W * scale);
-            int   drawH   = (int) (CLUSTER_H * scale);
-            mProjOffsetX  = (CLUSTER_W - drawW) / 2;
-            mProjOffsetY  = (CLUSTER_H - drawH) / 2;
-            mProjScale    = scale;
+            mMirrorReady = (ok == 1);
         } finally {
             mData.recycle();
             mReply.recycle();
@@ -362,7 +357,8 @@ public class Dl3ProjectionActivity extends Activity {
 
     private void stopProjectionInternal() {
         mProjecting = false;
-        // MIRROR_STOP (also releases SC layer)
+        mMirrorReady = false;
+        // MIRROR_STOP
         if (mDaemonBinder != null) {
             Parcel data = Parcel.obtain(); Parcel reply = Parcel.obtain();
             try {
@@ -409,25 +405,18 @@ public class Dl3ProjectionActivity extends Activity {
     // ── Touch forwarding ──────────────────────────────────────────────────────
 
     /**
-     * Scales touch event from SurfaceView preview dimensions → cluster coordinates (1920×720)
-     * and forwards via TRANSACT_INJECT_MOTION to the daemon (FLAG_ONEWAY, no reply).
+     * Mappe les coordonnées touch du SurfaceView preview (viewW×viewH) vers l'espace
+     * cluster (1920×720) et envoie via TRANSACT_INJECT_MOTION au daemon (FLAG_ONEWAY).
      *
-     * <p>Touch mapping accounts for letterboxing: the preview SurfaceView has a fixed 1920×720
-     * buffer but may be displayed at a different size. The mProjOffset/Scale values track the
-     * exact same letterbox formula used in MIRROR_START so touches land on the correct pixel.
-     *
-     * <p>The daemon uses its stored {@code sClusterDisplayId} (set during MIRROR_START) to route
-     * the event — no need to send the displayId in the Parcel.
+     * Mapping linéaire : clusterX = x / viewW * 1920, clusterY = y / viewH * 720.
+     * Correct car MIRROR_START projette src(1920×720) → dest(viewW×viewH) sans letterbox.
      */
     private void forwardTouch(MotionEvent event, int viewW, int viewH) {
-        if (mDaemonBinder == null || mProjScale <= 0f) return;
-        if (viewW <= 0 || viewH <= 0) return;
+        if (mDaemonBinder == null || viewW <= 0 || viewH <= 0) return;
 
-        // Map view coords → cluster coords, accounting for letterbox offset.
-        // mirror of ClusterMirrorManager.startMirrorViaDaemon projection formula.
-        float clusterX = (event.getX() - mProjOffsetX) / mProjScale;
-        float clusterY = (event.getY() - mProjOffsetY) / mProjScale;
-        // Clamp to valid cluster area
+        // Mapping linéaire view → cluster (pas de letterbox : le mirror remplit tout le SurfaceView)
+        float clusterX = event.getX() / viewW * CLUSTER_W;
+        float clusterY = event.getY() / viewH * CLUSTER_H;
         clusterX = Math.max(0, Math.min(clusterX, CLUSTER_W - 1));
         clusterY = Math.max(0, Math.min(clusterY, CLUSTER_H - 1));
 

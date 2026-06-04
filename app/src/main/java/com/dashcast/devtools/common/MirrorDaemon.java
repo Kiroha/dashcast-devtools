@@ -135,9 +135,7 @@ public final class MirrorDaemon {
 
     /** Active display mirror token (created by MIRROR_START, released by MIRROR_STOP). */
     private static volatile IBinder sMirrorToken = null;
-    /** Active cluster SurfaceControl layer (created by CLUSTER_ATTACH, released by MIRROR_STOP). */
-    private static volatile Object sClusterSc = null;
-    /** Active cluster overlay SurfaceView host (OpenBYD-style path, released by MIRROR_STOP). */
+    /** Active cluster overlay SurfaceView host (TYPE_SYSTEM_OVERLAY on displayId=1). */
     private static volatile View sClusterOverlayView = null;
     /** Display-scoped window manager that owns {@link #sClusterOverlayView}. */
     private static volatile WindowManager sClusterOverlayWindowManager = null;
@@ -292,19 +290,6 @@ public final class MirrorDaemon {
         if (sMirrorToken != null) {
             try { scDestroyDisplay(sMirrorToken); } catch (Exception ignored) {}
             sMirrorToken = null;
-        }
-        // Release cluster SC layer if attached
-        if (sClusterSc != null) {
-            try {
-                Class<?> scCls = Class.forName("android.view.SurfaceControl");
-                Method release = scCls.getDeclaredMethod("release");
-                release.setAccessible(true);
-                release.invoke(sClusterSc);
-                log("CLUSTER SC released");
-            } catch (Exception e) {
-                log("CLUSTER SC release error: " + e.getMessage());
-            }
-            sClusterSc = null;
         }
         releaseClusterOverlay();
         if (sVirtualDisplay != null) {
@@ -984,107 +969,27 @@ public final class MirrorDaemon {
         int h          = data.readInt();
         log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h);
 
-        // OpenBYD 2.2 pattern: SurfaceView overlay on the cluster display (displayId=1),
-        // VirtualDisplay output surface = overlay surface, app renders into VD → shows on cluster.
+        // Unique chemin : SurfaceView overlay (TYPE_SYSTEM_OVERLAY) sur displayId=1 (fission),
+        // VirtualDisplay TRUSTED attaché à la surface de l'overlay → Waze s'affiche sur le cluster.
         Surface overlaySurface = tryAttachClusterOverlay(layerStack, w, h);
         if (overlaySurface != null) {
             int displayId = createAndStoreTrustedVd(overlaySurface, w, h);
             if (displayId >= 0) {
-                log("CLUSTER_ATTACH: using overlay surface for VD displayId=" + displayId);
+                log("CLUSTER_ATTACH: overlay→VD OK displayId=" + displayId);
                 reply.writeNoException();
                 reply.writeInt(1);
                 reply.writeParcelable(overlaySurface, 0);
                 reply.writeInt(displayId);
                 return true;
             }
-            log("CLUSTER_ATTACH: overlay surface OK but VD creation failed, falling back to SC");
+            log("CLUSTER_ATTACH: VD creation failed — releasing overlay");
             releaseClusterOverlay();
         }
 
-        try {
-            Class<?> scCls      = Class.forName("android.view.SurfaceControl");
-            Class<?> sessionCls = Class.forName("android.view.SurfaceSession");
-
-            // 1. SurfaceSession — needed by Builder on API 29
-            Object session = sessionCls.getDeclaredConstructor().newInstance();
-
-            // 2. SurfaceControl.Builder — API 29: Builder(SurfaceSession), API 31+: Builder()
-            Class<?> builderCls = Class.forName("android.view.SurfaceControl$Builder");
-            Object builder;
-            try {
-                java.lang.reflect.Constructor<?> ctor =
-                        builderCls.getDeclaredConstructor(sessionCls);
-                ctor.setAccessible(true);
-                builder = ctor.newInstance(session);
-            } catch (NoSuchMethodException e) {
-                java.lang.reflect.Constructor<?> ctor =
-                        builderCls.getDeclaredConstructor();
-                ctor.setAccessible(true);
-                builder = ctor.newInstance();
-            }
-
-            // 3. Configure: name + buffer size
-            Method mName = builderCls.getDeclaredMethod("setName", String.class);
-            mName.setAccessible(true);
-            mName.invoke(builder, "devtools_cluster_out");
-
-            // setBufferSize (API 30+) or setSize (API 29)
-            try {
-                Method m = builderCls.getDeclaredMethod("setBufferSize", int.class, int.class);
-                m.setAccessible(true); m.invoke(builder, w, h);
-            } catch (NoSuchMethodException e) {
-                Method m = builderCls.getDeclaredMethod("setSize", int.class, int.class);
-                m.setAccessible(true); m.invoke(builder, w, h);
-            }
-
-            // 4. build() → SurfaceControl instance
-            Method build = builderCls.getDeclaredMethod("build");
-            build.setAccessible(true);
-            Object sc = build.invoke(builder);
-
-            // 5. Apply layer properties: setLayerStack + setLayer + show
-            // Transaction.setLayerStack(SurfaceControl, int) exists since API 29.
-            // The static setLayerStack(SurfaceControl, int) does NOT exist on API 29
-            // (static setLayerStack only accepts IBinder displayToken, not SurfaceControl).
-            // → always use Transaction regardless of SDK level.
-            android.view.SurfaceControl.Transaction tx =
-                    new android.view.SurfaceControl.Transaction();
-            Class<?> txCls = tx.getClass();
-            Method mSetLS  = txCls.getDeclaredMethod("setLayerStack", scCls, int.class);
-            Method mSetLyr = txCls.getDeclaredMethod("setLayer",      scCls, int.class);
-            Method mShow   = txCls.getDeclaredMethod("show",          scCls);
-            mSetLS.setAccessible(true);  mSetLS.invoke(tx, sc, layerStack);
-            mSetLyr.setAccessible(true); mSetLyr.invoke(tx, sc, Integer.MAX_VALUE - 1);
-            mShow.setAccessible(true);   mShow.invoke(tx, sc);
-            tx.apply();
-
-            // 6. Wrap SurfaceControl in a Surface via @hide constructor Surface(SurfaceControl)
-            java.lang.reflect.Constructor<?> surfCtor =
-                    Surface.class.getDeclaredConstructor(scCls);
-            surfCtor.setAccessible(true);
-            Surface outputSurface = (Surface) surfCtor.newInstance(sc);
-
-            sClusterSc = sc;
-            log("CLUSTER_ATTACH OK sc=" + sc + " surface.valid=" + outputSurface.isValid());
-
-            int displayId = createAndStoreTrustedVd(outputSurface, w, h);
-            if (displayId < 0) {
-                log("CLUSTER_ATTACH: VD creation failed after SC surface");
-                reply.writeNoException();
-                reply.writeInt(0);
-                return true;
-            }
-
-            reply.writeNoException();
-            reply.writeInt(1);
-            reply.writeParcelable(outputSurface, 0);
-            reply.writeInt(displayId);
-
-        } catch (Exception e) {
-            log("CLUSTER_ATTACH ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-            reply.writeNoException();
-            reply.writeInt(0);
-        }
+        // Overlay path failed — report error to client (no fallback).
+        log("CLUSTER_ATTACH FAILED: overlay path unavailable");
+        reply.writeNoException();
+        reply.writeInt(0);
         return true;
     }
 
@@ -1226,33 +1131,12 @@ public final class MirrorDaemon {
                     WindowManager.LayoutParams lp = createOverlayLayoutParams(targetDisplay, w, h);
                     WindowManager wm = (displayCtx != null)
                             ? displayCtx.getSystemService(WindowManager.class) : null;
-                    if (wm != null) {
-                        try {
-                            log("CLUSTER_ATTACH overlay: addView type=" + lp.type + " via display-scoped WM");
-                            wm.addView(surfaceView, lp);
-                            sClusterOverlayWindowManager = wm;
-                            log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
-                        } catch (SecurityException se) {
-                            log("CLUSTER_ATTACH overlay: type=" + lp.type + " denied (" + se.getMessage() + "), retrying TYPE_APPLICATION_OVERLAY");
-                            lp = createOverlayLayoutParamsFallback(targetDisplay, w, h);
-                            wm.addView(surfaceView, lp);
-                            sClusterOverlayWindowManager = wm;
-                            log("CLUSTER_ATTACH overlay host added (fallback) on displayId=" + targetDisplay.getDisplayId());
-                        }
-                    } else {
-                        // WindowManagerGlobal.addView(view, params, display, parentWindow)
-                        log("CLUSTER_ATTACH overlay: addView via WindowManagerGlobal (wm was null)");
-                        Class<?> wmgCls = Class.forName("android.view.WindowManagerGlobal");
-                        Object wmg = wmgCls.getMethod("getInstance").invoke(null);
-                        Method wmgAdd = wmgCls.getDeclaredMethod("addView",
-                                View.class, android.view.ViewGroup.LayoutParams.class,
-                                Display.class, android.view.Window.class);
-                        wmgAdd.setAccessible(true);
-                        wmgAdd.invoke(wmg, surfaceView, lp, targetDisplay, null);
-                        sClusterOverlayWindowManager = sContext.getSystemService(WindowManager.class);
-                        log("CLUSTER_ATTACH overlay host added (WMGlobal) on displayId=" + targetDisplay.getDisplayId());
-                    }
+                    if (wm == null) throw new RuntimeException("display-scoped WM unavailable for displayId=" + targetDisplay.getDisplayId());
+                    log("CLUSTER_ATTACH overlay: addView type=" + lp.type + " via display-scoped WM");
+                    wm.addView(surfaceView, lp);
+                    sClusterOverlayWindowManager = wm;
                     sClusterOverlayView = surfaceView;
+                    log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
                 } catch (Exception e) {
                     errorRef.set(new RuntimeException(e));
                     latch.countDown();
@@ -1305,11 +1189,9 @@ public final class MirrorDaemon {
 
     private static WindowManager.LayoutParams createOverlayLayoutParams(
             Display targetDisplay, int w, int h) {
-        // On API 26+ try TYPE_SYSTEM_OVERLAY (2006) first: requires INTERNAL_SYSTEM_WINDOW
-        // (declared in manifest, granted by platform signature). Bypasses AppOps entirely
-        // so mPolicyVisibility is guaranteed true → performShowLocked fires.
-        // Fall back to TYPE_APPLICATION_OVERLAY (2038) if INTERNAL_SYSTEM_WINDOW is not
-        // granted for uid=2000 on this ROM (com.android.shell may not declare it).
+        // TYPE_SYSTEM_OVERLAY (2006): requires INTERNAL_SYSTEM_WINDOW (manifest-declared,
+        // granted by platform signature). Bypasses AppOps entirely → mPolicyVisibility=true
+        // garanti → performShowLocked est appelé → overlay visible sur le cluster.
         int overlayType;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             overlayType = 2006; // TYPE_SYSTEM_OVERLAY — try first
@@ -1340,26 +1222,6 @@ public final class MirrorDaemon {
         return lp;
     }
 
-    private static WindowManager.LayoutParams createOverlayLayoutParamsFallback(
-            Display targetDisplay, int w, int h) {
-        // TYPE_APPLICATION_OVERLAY fallback (used if TYPE_SYSTEM_OVERLAY is denied).
-        int overlayType = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
-                ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                : WindowManager.LayoutParams.TYPE_PHONE;
-        final int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                w, h, overlayType, flags, android.graphics.PixelFormat.OPAQUE);
-        lp.setTitle("devtools_cluster_overlay");
-        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
-        lp.x = 0;
-        lp.y = 0;
-        if (sContext != null) lp.packageName = sContext.getPackageName();
-        log("CLUSTER_ATTACH overlay params fallback type=" + overlayType + " pkg=" + lp.packageName);
-        return lp;
-    }
 
     private static Display resolveClusterDisplay(int displayIdHint) {
         // sContext (createPackageContext in systemMain mode) has null Resources;
