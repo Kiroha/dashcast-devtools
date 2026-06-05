@@ -364,7 +364,16 @@ public class Dl3ProjectionActivity extends Activity {
                 doStartSlot(pkg, label, rect);
             } catch (Exception e) {
                 AppLogger.e(TAG, "startSlot error pkg=" + pkg, e);
+                mSlots.remove(pkg);
+                if (mDaemonBinder != null) {
+                    Parcel d = Parcel.obtain(), r = Parcel.obtain();
+                    try { d.writeInterfaceToken(MirrorDaemon.DESCRIPTOR); d.writeString(pkg);
+                        mDaemonBinder.transact(MirrorDaemon.TRANSACT_RELEASE_SLOT, d, r, 0);
+                        r.readException();
+                    } catch (Exception ignored) {} finally { d.recycle(); r.recycle(); }
+                }
                 safeRun(() -> {
+                    updateSlotsStatus();
                     setStatus(getString(R.string.projection_status_error, e.getMessage()));
                     btnStart.setEnabled(mSurfaceReady);
                     btnStop.setEnabled(!mSlots.isEmpty());
@@ -518,19 +527,17 @@ public class Dl3ProjectionActivity extends Activity {
         });
     }
 
-    /** Passe un slot en plein écran : libère les autres, resize ce slot. */
+    /** Passe un slot en plein écran : libère les autres, resize ce slot via RESIZE_SLOT. */
     private void fullscreenSlot(String pkg) {
         SlotState slot = mSlots.get(pkg);
         if (slot == null) return;
-        // Libère les autres slots
         for (String other : new ArrayList<>(mSlots.keySet())) {
             if (!other.equals(pkg)) releaseSlot(other);
         }
-        // Resize vers plein écran effectif
         Rect full = effectiveRect();
         saveRect(pkg, full);
-        sendResizeOverlay(full.left, full.top, full.width(), full.height());
         slot.rect = full;
+        sendResizeSlot(pkg, full);
         safeRun(this::updateSlotsStatus);
     }
 
@@ -771,20 +778,26 @@ public class Dl3ProjectionActivity extends Activity {
     }
 
     /**
-     * Mappe les coordonnées touch du SurfaceView preview (viewW×viewH) vers l'espace
-     * cluster (1920×720) et envoie via TRANSACT_INJECT_MOTION au daemon (FLAG_ONEWAY).
-     *
-     * Mapping linéaire : clusterX = x / viewW * 1920, clusterY = y / viewH * 720.
-     * Correct car MIRROR_START projette src(1920×720) → dest(viewW×viewH) sans letterbox.
+     * Route la touch vers le VD du slot qui contient les coordonnées cluster.
+     * Avec un seul slot : toujours ce slot. Avec plusieurs : dépend de la zone touchée.
+     * Wire INJECT_MOTION : writeInt(displayId) + writeParcelable(event).
      */
+    private int findDisplayIdForCoord(float cx, float cy) {
+        for (SlotState s : mSlots.values()) {
+            if (s.rect.contains((int) cx, (int) cy)) return s.displayId;
+        }
+        if (!mSlots.isEmpty()) return mSlots.values().iterator().next().displayId;
+        return mVdDisplayId;
+    }
+
     private void forwardTouch(MotionEvent event, int viewW, int viewH) {
         if (mDaemonBinder == null || viewW <= 0 || viewH <= 0) return;
 
-        // Mapping linéaire view → cluster (pas de letterbox : le mirror remplit tout le SurfaceView)
         float clusterX = event.getX() / viewW * CLUSTER_W;
         float clusterY = event.getY() / viewH * CLUSTER_H;
         clusterX = Math.max(0, Math.min(clusterX, CLUSTER_W - 1));
         clusterY = Math.max(0, Math.min(clusterY, CLUSTER_H - 1));
+        int targetDisplayId = findDisplayIdForCoord(clusterX, clusterY);
 
         MotionEvent scaled = MotionEvent.obtain(event);
         scaled.setLocation(clusterX, clusterY);
@@ -792,7 +805,7 @@ public class Dl3ProjectionActivity extends Activity {
         Parcel data = Parcel.obtain();
         try {
             data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
-            // No displayId in wire — daemon uses sClusterDisplayId set at MIRROR_START
+            data.writeInt(targetDisplayId); // daemon routes event to the correct VD
             data.writeParcelable(scaled, 0);
             // FLAG_ONEWAY: fire-and-forget, no reply (latency-critical at 60-120 events/s)
             mDaemonBinder.transact(MirrorDaemon.TRANSACT_INJECT_MOTION, data, null,

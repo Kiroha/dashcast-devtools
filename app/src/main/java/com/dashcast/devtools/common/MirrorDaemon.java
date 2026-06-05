@@ -109,14 +109,7 @@ public final class MirrorDaemon {
      * IDisplayManager.setVirtualDisplaySurface() internally.
      */
     public static final int TRANSACT_CLUSTER_ATTACH = 5;
-    /**
-     * TRANSACT 6 — create a FLAG_TRUSTED VirtualDisplay from the daemon (shell uid=2000,
-     * holds INTERNAL_SYSTEM_WINDOW). Apps like Waze check {@code Display.FLAG_TRUSTED} at
-     * runtime and refuse to run on untrusted displays.
-     * Wire: writeInterfaceToken + writeInt(w) + writeInt(h) + writeInt(dpi).
-     * Reply: writeNoException() + writeInt(displayId) or -1 on failure.
-     * The daemon stores the VD callback binder (sVdCallback). MIRROR_STOP releases it.
-     */
+    /** TRANSACT 6 — deprecated, kept for wire-format stability. Not handled. */
     public static final int TRANSACT_CREATE_VD = 6;
     /**
      * TRANSACT 7 — launch {@code pkg} on display 0 then move its task to {@code displayId}.
@@ -200,13 +193,6 @@ public final class MirrorDaemon {
 
     /** Active display mirror token (created by MIRROR_START, released by MIRROR_STOP). */
     private static volatile IBinder sMirrorToken = null;
-    /** Overlay+VD for CLUSTER_ATTACH (legacy single-slot, pkg="__default__"). */
-    private static volatile View sClusterOverlayView = null;
-    private static volatile WindowManager sClusterOverlayWindowManager = null;
-    private static volatile VirtualDisplay sVirtualDisplay = null;
-
-    /** displayId used by INJECT_MOTION — last display set by MIRROR_START. */
-    private static volatile int sClusterDisplayId = -1;
 
     // InputManager reflection — initialised once in main(), reused on every event.
     private static volatile Object sInputManager   = null;
@@ -258,16 +244,16 @@ public final class MirrorDaemon {
         protected boolean onTransact(int code, Parcel data, Parcel reply, int flags)
                 throws RemoteException {
             switch (code) {
-                case TRANSACT_MIRROR_START:   return handleMirrorStart(data, reply);
-                case TRANSACT_MIRROR_STOP:    return handleMirrorStop(data, reply);
-                case TRANSACT_CLUSTER_ATTACH: return handleClusterAttach(data, reply);
-                case TRANSACT_INJECT_MOTION:  return handleInjectMotion(data, reply);
-                case TRANSACT_CREATE_VD:          return handleCreateVd(data, reply);
-                case TRANSACT_LAUNCH_AND_FORCE:    return handleLaunchAndForce(data, reply);
-                case TRANSACT_RESIZE_OVERLAY:      return handleResizeOverlay(data, reply);
-                case TRANSACT_RESIZE_SLOT:         return handleResizeSlot(data, reply);
-                case TRANSACT_ATTACH_SLOT:         return handleAttachSlot(data, reply);
-                case TRANSACT_RELEASE_SLOT:        return handleReleaseSlot(data, reply);
+                case TRANSACT_MIRROR_START:    return handleMirrorStart(data, reply);
+                case TRANSACT_MIRROR_STOP:     return handleMirrorStop(data, reply);
+                case TRANSACT_CLUSTER_ATTACH:  return handleClusterAttach(data, reply);
+                case TRANSACT_INJECT_MOTION:   return handleInjectMotion(data, reply);
+                // TRANSACT_CREATE_VD (6) deprecated — fall through to default
+                case TRANSACT_LAUNCH_AND_FORCE: return handleLaunchAndForce(data, reply);
+                case TRANSACT_RESIZE_OVERLAY:   return handleResizeOverlay(data, reply);
+                case TRANSACT_RESIZE_SLOT:      return handleResizeSlot(data, reply);
+                case TRANSACT_ATTACH_SLOT:      return handleAttachSlot(data, reply);
+                case TRANSACT_RELEASE_SLOT:     return handleReleaseSlot(data, reply);
                 default: return super.onTransact(code, data, reply, flags);
             }
         }
@@ -295,7 +281,6 @@ public final class MirrorDaemon {
         int srcW             = data.readInt();
         int srcH             = data.readInt();
         int clusterDisplayId = data.readInt();
-        sClusterDisplayId    = clusterDisplayId; // store for INJECT_MOTION
         int viewW            = data.readInt();
         int viewH            = data.readInt();
         Surface surface      = data.readParcelable(Surface.class.getClassLoader());
@@ -350,16 +335,8 @@ public final class MirrorDaemon {
             try { scDestroyDisplay(sMirrorToken); } catch (Exception ignored) {}
             sMirrorToken = null;
         }
-        // Release all named slots (multi-app)
         for (SlotInfo slot : sSlots.values()) slot.release();
         sSlots.clear();
-        // Release legacy single slot
-        releaseClusterOverlay();
-        if (sVirtualDisplay != null) {
-            try { sVirtualDisplay.release(); log("VD released"); }
-            catch (Exception e) { log("VD release error: " + e.getMessage()); }
-            sVirtualDisplay = null;
-        }
         reply.writeNoException();
         return true;
     }
@@ -378,11 +355,13 @@ public final class MirrorDaemon {
      */
     private static boolean handleInjectMotion(Parcel data, Parcel reply) {
         data.enforceInterface(DESCRIPTOR);
+        // Wire: writeInt(targetDisplayId) + writeParcelable(event)
+        int targetDisplayId = data.readInt();
         MotionEvent event = data.readParcelable(MotionEvent.class.getClassLoader());
         if (event != null) {
             try {
                 if (sSetDisplayId != null) {
-                    sSetDisplayId.invoke(event, sClusterDisplayId);
+                    sSetDisplayId.invoke(event, targetDisplayId);
                 }
                 if (sInjectMethod != null) {
                     sInjectMethod.invoke(sInputManager, event, 0 /* ASYNC */);
@@ -393,7 +372,6 @@ public final class MirrorDaemon {
                 event.recycle();
             }
         }
-        // FLAG_ONEWAY: reply is null — do not touch it.
         return true;
     }
 
@@ -481,53 +459,7 @@ public final class MirrorDaemon {
      * <p>Wire format: writeInterfaceToken + writeInt(w) + writeInt(h) + writeInt(dpi)
      * <p>Reply: writeNoException() + writeInt(displayId) or -1 on failure.
      */
-    private static boolean handleCreateVd(Parcel data, Parcel reply) {
-        data.enforceInterface(DESCRIPTOR);
-        int w   = data.readInt();
-        int h   = data.readInt();
-        int dpi = data.readInt();
-        log("CREATE_VD " + w + "×" + h + " dpi=" + dpi);
-
-        if (sContext == null) {
-            log("CREATE_VD: Context not initialized (initContext failed)");
-            reply.writeNoException();
-            reply.writeInt(-1);
-            return true;
-        }
-
-        try {
-            // Release any previous VD
-            if (sVirtualDisplay != null) {
-                sVirtualDisplay.release();
-                sVirtualDisplay = null;
-            }
-
-            // Legacy path: VD created without surface (null). Aligned with OpenBYD 2.2, flags=322.
-            // New callers should use TRANSACT_CLUSTER_ATTACH to get the Surface, then create the
-            // VirtualDisplay themselves with that Surface passed at construction time.
-            DisplayManager dm = sContext.getSystemService(DisplayManager.class);
-            VirtualDisplay vd = dm.createVirtualDisplay(
-                    "devtools_projection_vd",
-                    w, h, dpi,
-                    /*surface=*/ null,
-                    /* flags=322: PRESENTATION(2)|SUPPORTS_TOUCH(0x40)|DESTROY_CONTENT_ON_REMOVAL(0x100) */
-                    322);
-
-            if (vd == null) throw new RuntimeException("createVirtualDisplay returned null");
-
-            sVirtualDisplay = vd;
-            int displayId = vd.getDisplay().getDisplayId();
-            log("CREATE_VD OK displayId=" + displayId);
-            reply.writeNoException();
-            reply.writeInt(displayId);
-        } catch (Exception e) {
-            log("CREATE_VD ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-            sVirtualDisplay = null;
-            reply.writeNoException();
-            reply.writeInt(-1);
-        }
-        return true;
-    }
+    // handleCreateVd removed — TRANSACT_CREATE_VD (6) deprecated.
 
     /**
      * TRANSACT_LAUNCH_AND_FORCE — launches {@code pkg} on display 0 then moves its task
@@ -850,8 +782,7 @@ public final class MirrorDaemon {
                     try {
                         for (int iter = 0; iter < 20; iter++) {
                             Thread.sleep(500);
-                            // Abort si plus aucun VD actif (legacy ou named slots)
-                            if (sVirtualDisplay == null && sSlots.isEmpty()) {
+                            if (sSlots.isEmpty()) {
                                 log("WATCHDOG: VD released (MIRROR_STOP), aborting");
                                 return;
                             }
@@ -1026,288 +957,107 @@ public final class MirrorDaemon {
      *                          + writeInt(displayId)}
      * Reply on failure: {@code writeNoException() + writeInt(0)}
      */
+    /** CLUSTER_ATTACH — wrapper thin sur ATTACH_SLOT avec pkg="__default__". */
     private static boolean handleClusterAttach(Parcel data, Parcel reply) {
         data.enforceInterface(DESCRIPTOR);
         int layerStack = data.readInt();
-        int w          = data.readInt();
-        int h          = data.readInt();
-        log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h);
+        int w = data.readInt(), h = data.readInt();
+        log("CLUSTER_ATTACH layerStack=" + layerStack + " " + w + "×" + h
+                + " → delegating to ATTACH_SLOT __default__");
 
-        // Unique chemin : SurfaceView overlay (TYPE_SYSTEM_OVERLAY) sur displayId=1 (fission),
-        // VirtualDisplay TRUSTED attaché à la surface de l'overlay → Waze s'affiche sur le cluster.
-        Surface overlaySurface = tryAttachClusterOverlay(layerStack, w, h);
-        if (overlaySurface != null) {
-            int displayId = createAndStoreTrustedVd(overlaySurface, w, h);
-            if (displayId >= 0) {
-                log("CLUSTER_ATTACH: overlay→VD OK displayId=" + displayId);
-                reply.writeNoException();
-                reply.writeInt(1);
-                reply.writeParcelable(overlaySurface, 0);
-                reply.writeInt(displayId);
-                return true;
-            }
-            log("CLUSTER_ATTACH: VD creation failed — releasing overlay");
-            releaseClusterOverlay();
+        SlotInfo existing = sSlots.remove("__default__");
+        if (existing != null) existing.release();
+
+        SlotInfo slot = new SlotInfo("__default__", 0, 0, w, h);
+        Surface surface = tryAttachSlotOverlay(slot);
+        if (surface == null) {
+            log("CLUSTER_ATTACH FAILED: overlay unavailable");
+            reply.writeNoException(); reply.writeInt(0); return true;
         }
-
-        // Overlay path failed — report error to client (no fallback).
-        log("CLUSTER_ATTACH FAILED: overlay path unavailable");
+        int displayId = createTrustedVdForSlot(slot, surface);
+        if (displayId < 0) {
+            slot.release();
+            reply.writeNoException(); reply.writeInt(0); return true;
+        }
+        sSlots.put("__default__", slot);
+        log("CLUSTER_ATTACH: OK displayId=" + displayId);
         reply.writeNoException();
-        reply.writeInt(0);
+        reply.writeInt(1);
+        reply.writeParcelable(surface, 0);
+        reply.writeInt(displayId);
         return true;
     }
 
-    /**
-     * Creates a TRUSTED VirtualDisplay bound to {@code surface} and stores it in
-     * {@link #sVirtualDisplay}. Returns the display ID on success, -1 on failure.
-     * Tries flags=1346 (322|TRUSTED) first; falls back to 322 if the ROM denies TRUSTED.
-     */
-    private static int createAndStoreTrustedVd(Surface surface, int w, int h) {
+    /** Creates a TRUSTED VirtualDisplay for the given slot. */
+    private static int createTrustedVdForSlot(SlotInfo slot, Surface surface) {
         try {
-            if (sVirtualDisplay != null) {
-                try { sVirtualDisplay.release(); } catch (Exception ignored) {}
-                sVirtualDisplay = null;
-            }
             DisplayManager dm = sContext.getSystemService(DisplayManager.class);
             VirtualDisplay vd = null;
             try {
-                vd = dm.createVirtualDisplay("devtools_projection_vd", w, h, 160, surface, 1346);
-                if (vd != null) log("CLUSTER_ATTACH: VD TRUSTED flags=1346 OK");
-            } catch (Exception eTrusted) {
-                log("CLUSTER_ATTACH: VD TRUSTED failed (" + eTrusted.getMessage() + "), fallback 322");
+                vd = dm.createVirtualDisplay(
+                        "devtools_slot_" + slot.pkg, slot.w, slot.h, 160, surface, 1346);
+                if (vd != null) log("ATTACH_SLOT VD TRUSTED OK pkg=" + slot.pkg);
+            } catch (Exception e) {
+                log("ATTACH_SLOT VD TRUSTED failed, fallback 322: " + e.getMessage());
             }
             if (vd == null) {
-                vd = dm.createVirtualDisplay("devtools_projection_vd", w, h, 160, surface, 322);
+                vd = dm.createVirtualDisplay(
+                        "devtools_slot_" + slot.pkg, slot.w, slot.h, 160, surface, 322);
             }
-            if (vd == null) throw new RuntimeException("createVirtualDisplay returned null");
-            sVirtualDisplay = vd;
-            int displayId = vd.getDisplay().getDisplayId();
-            log("CLUSTER_ATTACH: VD displayId=" + displayId);
-            return displayId;
+            if (vd == null) return -1;
+            slot.vd = vd;
+            slot.displayId = vd.getDisplay().getDisplayId();
+            return slot.displayId;
         } catch (Exception e) {
-            log("CLUSTER_ATTACH: VD ERROR: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            log("ATTACH_SLOT VD error: " + e.getMessage());
             return -1;
         }
     }
 
-    private static Surface tryAttachClusterOverlay(int displayIdHint, int w, int h) {
-        if (sContext == null) {
-            log("CLUSTER_ATTACH overlay skipped: context unavailable");
-            return null;
+    private static boolean handleResizeOverlay(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        final int x = data.readInt();
+        final int y = data.readInt();
+        final int w = data.readInt();
+        final int h = data.readInt();
+        log("RESIZE_OVERLAY x=" + x + " y=" + y + " w=" + w + " h=" + h);
+
+        // Résout le premier slot actif (préférence : __default__ sinon premier)
+        SlotInfo target = sSlots.get("__default__");
+        if (target == null && !sSlots.isEmpty()) target = sSlots.values().iterator().next();
+        if (target == null) {
+            log("RESIZE_OVERLAY: no active slot — ignored");
+            reply.writeNoException(); reply.writeInt(0); return true;
         }
+        final SlotInfo slot = target;
+        slot.x = x; slot.y = y; slot.w = w; slot.h = h;
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        new android.os.Handler(Looper.getMainLooper()).post(() -> {
+            try {
+                WindowManager.LayoutParams lp = createOverlayLayoutParams(null, w, h);
+                lp.x = x; lp.y = y; lp.width = w; lp.height = h;
+                slot.overlayWM.updateViewLayout(slot.overlayView, lp);
+                ((SurfaceView) slot.overlayView).getHolder().setFixedSize(w, h);
+                log("RESIZE_OVERLAY: slot[" + slot.pkg + "] overlay updated");
+            } catch (Exception e) {
+                log("RESIZE_OVERLAY overlay error: " + e.getMessage());
+            } finally { latch.countDown(); }
+        });
+        try { latch.await(1, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
 
         try {
-            log("CLUSTER_ATTACH overlay step1: releaseClusterOverlay");
-            releaseClusterOverlay();
-
-            log("CLUSTER_ATTACH overlay step2: resolveClusterDisplay hint=" + displayIdHint);
-            Display targetDisplay = resolveClusterDisplay(displayIdHint);
-            if (targetDisplay == null) {
-                log("CLUSTER_ATTACH overlay skipped: no display for hint=" + displayIdHint);
-                return null;
-            }
-            log("CLUSTER_ATTACH overlay step3: targetDisplay=" + targetDisplay.getDisplayId() + " latch setup");
-
-            CountDownLatch latch = new CountDownLatch(1);
-            AtomicReference<Surface> surfaceRef = new AtomicReference<>();
-            AtomicReference<RuntimeException> errorRef = new AtomicReference<>();
-
-            Runnable attach = () -> {
-                try {
-                    log("CLUSTER_ATTACH overlay Runnable: start sSysContext="
-                            + (sSysContext != null ? "non-null" : "null")
-                            + " sContext=" + (sContext != null ? "non-null" : "null"));
-
-                    // ── Step A: build a display-scoped context ───────────────────────────
-                    // createDisplayContext() gives a ContextImpl configured with the cluster
-                    // display's metrics. On BYD's ROM, however, it may return a context
-                    // whose Resources are null for displayId=2 (the non-default cluster
-                    // display). We verify before using it; fall back to the base context
-                    // (which has framework Resources) for SurfaceView construction.
-                    Context base = (sSysContext != null) ? sSysContext : sContext;
-                    Context displayCtx = null;
-                    try {
-                        displayCtx = base.createDisplayContext(targetDisplay);
-                    } catch (Exception e) {
-                        log("CLUSTER_ATTACH overlay: createDisplayContext threw: " + e.getMessage());
-                    }
-                    boolean displayCtxHasResources = displayCtx != null
-                            && displayCtx.getResources() != null;
-                    // viewCtx must have non-null Resources for View construction.
-                    Context viewCtx = displayCtxHasResources ? displayCtx : base;
-                    log("CLUSTER_ATTACH overlay: displayCtx=" + (displayCtx != null ? "ok" : "null")
-                            + " resources=" + (displayCtxHasResources ? "ok" : "null/missing")
-                            + " → viewCtx=" + viewCtx.getClass().getSimpleName());
-
-                    // ── Step B: grant OP_SYSTEM_ALERT_WINDOW via AppOps ─────────────────
-                    // TYPE_APPLICATION_OVERLAY requires SYSTEM_ALERT_WINDOW. shell uid=2000
-                    // does not declare it in its manifest, but AppOpsManager.setMode() is
-                    // callable by privileged processes on most ROMs including BYD's.
-                    // We try it unconditionally and swallow any SecurityException — the
-                    // worst case is that addView() throws BadTokenException (caught below).
-                    try {
-                        Object appOps = sContext.getSystemService(Context.APP_OPS_SERVICE);
-                        // OP_SYSTEM_ALERT_WINDOW = 24, MODE_ALLOWED = 0
-                        Method setMode = appOps.getClass().getMethod(
-                                "setMode", int.class, int.class, String.class, int.class);
-                        setMode.setAccessible(true);
-                        setMode.invoke(appOps, 24,
-                                android.os.Process.myUid(), sContext.getPackageName(), 0);
-                        log("CLUSTER_ATTACH overlay: OP_SYSTEM_ALERT_WINDOW → MODE_ALLOWED");
-                    } catch (Exception appOpsEx) {
-                        log("CLUSTER_ATTACH overlay: AppOps grant skipped ("
-                                + appOpsEx.getClass().getSimpleName() + ": "
-                                + appOpsEx.getMessage() + ")");
-                    }
-
-                    // ── Step C: create SurfaceView and attach surface callback ───────────
-                    SurfaceView surfaceView = new SurfaceView(viewCtx);
-                    SurfaceHolder holder = surfaceView.getHolder();
-                    holder.setFixedSize(w, h);
-                    holder.addCallback(new SurfaceHolder.Callback() {
-                        @Override
-                        public void surfaceCreated(SurfaceHolder surfaceHolder) {
-                            Surface surface = surfaceHolder.getSurface();
-                            if (surface != null && surface.isValid()) {
-                                surfaceRef.compareAndSet(null, surface);
-                                latch.countDown();
-                            }
-                        }
-
-                        @Override
-                        public void surfaceChanged(SurfaceHolder surfaceHolder, int format, int width, int height) {
-                            Surface surface = surfaceHolder.getSurface();
-                            if (surface != null && surface.isValid()) {
-                                surfaceRef.compareAndSet(null, surface);
-                                latch.countDown();
-                            }
-                        }
-
-                        @Override
-                        public void surfaceDestroyed(SurfaceHolder surfaceHolder) {
-                        }
-                    });
-
-                    // ── Step D: add view to the cluster display via WindowManager ────────
-                    // Try TYPE_SYSTEM_OVERLAY first (bypasses AppOps, mPolicyVisibility=true).
-                    // Fall back to TYPE_APPLICATION_OVERLAY if INTERNAL_SYSTEM_WINDOW is denied
-                    // for uid=2000 on this ROM.
-                    WindowManager.LayoutParams lp = createOverlayLayoutParams(targetDisplay, w, h);
-                    WindowManager wm = (displayCtx != null)
-                            ? displayCtx.getSystemService(WindowManager.class) : null;
-                    if (wm == null) throw new RuntimeException("display-scoped WM unavailable for displayId=" + targetDisplay.getDisplayId());
-                    log("CLUSTER_ATTACH overlay: addView type=" + lp.type + " via display-scoped WM");
-                    wm.addView(surfaceView, lp);
-                    sClusterOverlayWindowManager = wm;
-                    sClusterOverlayView = surfaceView;
-                    log("CLUSTER_ATTACH overlay host added on displayId=" + targetDisplay.getDisplayId());
-                } catch (Exception e) {
-                    errorRef.set(new RuntimeException(e));
-                    latch.countDown();
-                }
-            };
-
-            log("CLUSTER_ATTACH overlay step4: posting Runnable to Looper myLooper="
-                    + (Looper.myLooper() != null ? "non-null" : "null")
-                    + " mainLooper=" + (Looper.getMainLooper() != null ? "non-null" : "null"));
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                attach.run();
-            } else {
-                new android.os.Handler(Looper.getMainLooper()).post(attach);
-            }
-
-            log("CLUSTER_ATTACH overlay step5: awaiting latch");
-            if (!latch.await(2, TimeUnit.SECONDS)) {
-                log("CLUSTER_ATTACH overlay timed out waiting for surface");
-                releaseClusterOverlay();
-                return null;
-            }
-
-            RuntimeException error = errorRef.get();
-            if (error != null) {
-                Throwable cause = error.getCause() != null ? error.getCause() : error;
-                // Unwrap InvocationTargetException from reflection calls to surface the real cause.
-                if (cause instanceof java.lang.reflect.InvocationTargetException
-                        && cause.getCause() != null) {
-                    cause = cause.getCause();
-                }
-                log("CLUSTER_ATTACH overlay ERROR: " + cause.getClass().getSimpleName()
-                        + ": " + cause.getMessage());
-                releaseClusterOverlay();
-                return null;
-            }
-
-            Surface surface = surfaceRef.get();
-            if (surface == null || !surface.isValid()) {
-                log("CLUSTER_ATTACH overlay produced no valid surface");
-                releaseClusterOverlay();
-                return null;
-            }
-            return surface;
+            slot.vd.resize(w, h, 160);
+            log("RESIZE_OVERLAY: slot[" + slot.pkg + "] VD resized OK");
         } catch (Exception e) {
-            log("CLUSTER_ATTACH overlay failed: " + e.getClass().getSimpleName() + ": " + e.getMessage());
-            releaseClusterOverlay();
-            return null;
+            log("RESIZE_OVERLAY VD error: " + e.getMessage());
         }
+
+        reply.writeNoException();
+        reply.writeInt(1);
+        return true;
     }
 
-    private static WindowManager.LayoutParams createOverlayLayoutParams(
-            Display targetDisplay, int w, int h) {
-        // TYPE_SYSTEM_OVERLAY (2006): requires INTERNAL_SYSTEM_WINDOW (manifest-declared,
-        // granted by platform signature). Bypasses AppOps entirely → mPolicyVisibility=true
-        // garanti → performShowLocked est appelé → overlay visible sur le cluster.
-        int overlayType;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            overlayType = 2006; // TYPE_SYSTEM_OVERLAY — try first
-        } else {
-            overlayType = WindowManager.LayoutParams.TYPE_PHONE;
-        }
-
-        final int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
-                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
-
-        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
-                w, h, overlayType, flags, android.graphics.PixelFormat.OPAQUE);
-        lp.setTitle("devtools_cluster_overlay");
-        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
-        lp.x = 0;
-        lp.y = 0;
-        // Explicitly set packageName so WMS AppOps/permission check uses uid=2000 /
-        // "com.android.shell", matching our runtime AppOps grant.
-        if (sContext != null) {
-            lp.packageName = sContext.getPackageName(); // "com.android.shell"
-        }
-        log("CLUSTER_ATTACH overlay params type=" + overlayType
-                + " size=" + w + "×" + h
-                + (targetDisplay != null ? " targetDisplay=" + targetDisplay.getDisplayId() : "")
-                + " pkg=" + lp.packageName);
-        return lp;
-    }
-
-
-    private static Display resolveClusterDisplay(int displayIdHint) {
-        // sContext (createPackageContext in systemMain mode) has null Resources;
-        // DisplayManager.getOrCreateDisplayLocked() calls mContext.getResources() → NPE.
-        // sSysContext (ActivityThread.getSystemContext) has valid framework Resources.
-        Context dmCtx = (sSysContext != null) ? sSysContext : sContext;
-        DisplayManager dm = dmCtx.getSystemService(DisplayManager.class);
-        if (dm == null) return null;
-
-        Display display = dm.getDisplay(displayIdHint);
-        if (display != null) return display;
-
-        for (Display candidate : dm.getDisplays()) {
-            String name = candidate.getName();
-            if (name == null) continue;
-            String lowered = name.toLowerCase(Locale.US);
-            if (lowered.contains("cluster") || lowered.contains("fission")) {
-                return candidate;
-            }
-        }
-        return null;
-    }
 
     private static boolean handleResizeSlot(Parcel data, Parcel reply) {
         data.enforceInterface(DESCRIPTOR);
@@ -1399,6 +1149,7 @@ public final class MirrorDaemon {
     }
 
     /** Creates an overlay SurfaceView at the slot's rect on the cluster display. */
+
     private static Surface tryAttachSlotOverlay(SlotInfo slot) {
         try {
             log("ATTACH_SLOT overlay step1: resolveClusterDisplay");
@@ -1512,116 +1263,63 @@ public final class MirrorDaemon {
     }
 
     /** Creates a TRUSTED VirtualDisplay for the given slot. */
-    private static int createTrustedVdForSlot(SlotInfo slot, Surface surface) {
-        try {
-            DisplayManager dm = sContext.getSystemService(DisplayManager.class);
-            VirtualDisplay vd = null;
-            try {
-                vd = dm.createVirtualDisplay(
-                        "devtools_slot_" + slot.pkg, slot.w, slot.h, 160, surface, 1346);
-                if (vd != null) log("ATTACH_SLOT VD TRUSTED OK pkg=" + slot.pkg);
-            } catch (Exception e) {
-                log("ATTACH_SLOT VD TRUSTED failed, fallback 322: " + e.getMessage());
-            }
-            if (vd == null) {
-                vd = dm.createVirtualDisplay(
-                        "devtools_slot_" + slot.pkg, slot.w, slot.h, 160, surface, 322);
-            }
-            if (vd == null) return -1;
-            slot.vd = vd;
-            slot.displayId = vd.getDisplay().getDisplayId();
-            return slot.displayId;
-        } catch (Exception e) {
-            log("ATTACH_SLOT VD error: " + e.getMessage());
-            return -1;
-        }
-    }
 
-    private static boolean handleResizeOverlay(Parcel data, Parcel reply) {
-        data.enforceInterface(DESCRIPTOR);
-        final int x = data.readInt();
-        final int y = data.readInt();
-        final int w = data.readInt();
-        final int h = data.readInt();
-        log("RESIZE_OVERLAY x=" + x + " y=" + y + " w=" + w + " h=" + h);
-
-        // Si les champs legacy sont vides mais qu'il y a des slots nommés,
-        // délègue au premier slot trouvé (cas ATTACH_SLOT).
-        if (sClusterOverlayView == null || sVirtualDisplay == null) {
-            if (!sSlots.isEmpty()) {
-                SlotInfo first = sSlots.values().iterator().next();
-                log("RESIZE_OVERLAY: delegating to slot[" + first.pkg + "]");
-                first.x = x; first.y = y; first.w = w; first.h = h;
-                final CountDownLatch latchS = new CountDownLatch(1);
-                new android.os.Handler(Looper.getMainLooper()).post(() -> {
-                    try {
-                        WindowManager.LayoutParams lp = createOverlayLayoutParams(null, w, h);
-                        lp.x = x; lp.y = y; lp.width = w; lp.height = h;
-                        first.overlayWM.updateViewLayout(first.overlayView, lp);
-                        ((SurfaceView) first.overlayView).getHolder().setFixedSize(w, h);
-                        log("RESIZE_OVERLAY slot overlay updated");
-                    } catch (Exception e) {
-                        log("RESIZE_OVERLAY slot overlay error: " + e.getMessage());
-                    } finally { latchS.countDown(); }
-                });
-                try { latchS.await(1, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
-                try { first.vd.resize(w, h, 160); log("RESIZE_OVERLAY slot VD resized"); }
-                catch (Exception e) { log("RESIZE_OVERLAY slot VD error: " + e.getMessage()); }
-                reply.writeNoException(); reply.writeInt(1); return true;
-            }
-            log("RESIZE_OVERLAY: no active overlay/VD — ignored");
-            reply.writeNoException(); reply.writeInt(0); return true;
-        }
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        new android.os.Handler(Looper.getMainLooper()).post(() -> {
-            try {
-                WindowManager.LayoutParams lp = createOverlayLayoutParams(null, w, h);
-                lp.x = x; lp.y = y; lp.width = w; lp.height = h;
-                sClusterOverlayWindowManager.updateViewLayout(sClusterOverlayView, lp);
-                ((SurfaceView) sClusterOverlayView).getHolder().setFixedSize(w, h);
-                log("RESIZE_OVERLAY: overlay updated");
-            } catch (Exception e) {
-                log("RESIZE_OVERLAY overlay error: " + e.getMessage());
-            } finally { latch.countDown(); }
-        });
-
-        try { latch.await(1, TimeUnit.SECONDS); } catch (InterruptedException ignored) {}
-
-        try {
-            sVirtualDisplay.resize(w, h, 160);
-            log("RESIZE_OVERLAY: VD resized OK");
-        } catch (Exception e) {
-            log("RESIZE_OVERLAY VD error: " + e.getMessage());
-        }
-
-        reply.writeNoException();
-        reply.writeInt(1);
-        return true;
-    }
-
-    private static void releaseClusterOverlay() {
-        final View overlayView = sClusterOverlayView;
-        final WindowManager windowManager = sClusterOverlayWindowManager;
-        sClusterOverlayView = null;
-        sClusterOverlayWindowManager = null;
-        if (overlayView == null || windowManager == null) {
-            return;
-        }
-
-        Runnable release = () -> {
-            try {
-                windowManager.removeViewImmediate(overlayView);
-                log("CLUSTER_ATTACH overlay removed");
-            } catch (Exception e) {
-                log("CLUSTER_ATTACH overlay remove error: " + e.getMessage());
-            }
-        };
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            release.run();
+    private static WindowManager.LayoutParams createOverlayLayoutParams(
+            Display targetDisplay, int w, int h) {
+        // TYPE_SYSTEM_OVERLAY (2006): requires INTERNAL_SYSTEM_WINDOW (manifest-declared,
+        // granted by platform signature). Bypasses AppOps entirely → mPolicyVisibility=true
+        // garanti → performShowLocked est appelé → overlay visible sur le cluster.
+        int overlayType;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            overlayType = 2006; // TYPE_SYSTEM_OVERLAY — try first
         } else {
-            new android.os.Handler(Looper.getMainLooper()).post(release);
+            overlayType = WindowManager.LayoutParams.TYPE_PHONE;
         }
+
+        final int flags = WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+                | WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                w, h, overlayType, flags, android.graphics.PixelFormat.OPAQUE);
+        lp.setTitle("devtools_cluster_overlay");
+        lp.gravity = android.view.Gravity.TOP | android.view.Gravity.START;
+        lp.x = 0;
+        lp.y = 0;
+        // Explicitly set packageName so WMS AppOps/permission check uses uid=2000 /
+        // "com.android.shell", matching our runtime AppOps grant.
+        if (sContext != null) {
+            lp.packageName = sContext.getPackageName(); // "com.android.shell"
+        }
+        log("CLUSTER_ATTACH overlay params type=" + overlayType
+                + " size=" + w + "×" + h
+                + (targetDisplay != null ? " targetDisplay=" + targetDisplay.getDisplayId() : "")
+                + " pkg=" + lp.packageName);
+        return lp;
+    }
+
+
+
+    private static Display resolveClusterDisplay(int displayIdHint) {
+        Context dmCtx = (sSysContext != null) ? sSysContext : sContext;
+        DisplayManager dm = dmCtx.getSystemService(DisplayManager.class);
+        if (dm == null) return null;
+        Display display = dm.getDisplay(displayIdHint);
+        if (display != null) return display;
+        for (Display candidate : dm.getDisplays()) {
+            String name = candidate.getName();
+            if (name == null) continue;
+            String lowered = name.toLowerCase(Locale.US);
+            if (lowered.contains("cluster") || lowered.contains("fission")) return candidate;
+        }
+        return null;
+    }
+
+    /** Libère le slot "__default__" (CLUSTER_ATTACH legacy). */
+    private static void releaseClusterOverlay() {
+        SlotInfo slot = sSlots.remove("__default__");
+        if (slot != null) slot.release();
     }
 
     private static List<Method> getAllMethods(Class<?> type) {
