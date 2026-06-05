@@ -1450,8 +1450,10 @@ public final class MirrorDaemon {
                         }
                         @Override public void surfaceChanged(SurfaceHolder h, int f, int w2, int h2) {
                             Surface s = h.getSurface();
-                            if (s != null && s.isValid()) surfaceRef.compareAndSet(null, s);
-                            latch.countDown();
+                            if (s != null && s.isValid()) {
+                                surfaceRef.compareAndSet(null, s);
+                                latch.countDown();
+                            }
                         }
                         @Override public void surfaceDestroyed(SurfaceHolder h) {}
                     });
