@@ -1401,20 +1401,31 @@ public final class MirrorDaemon {
     /** Creates an overlay SurfaceView at the slot's rect on the cluster display. */
     private static Surface tryAttachSlotOverlay(SlotInfo slot) {
         try {
+            log("ATTACH_SLOT overlay step1: resolveClusterDisplay");
             Display target = resolveClusterDisplay(1);
-            if (target == null) return null;
+            if (target == null) {
+                log("ATTACH_SLOT overlay skipped: cluster display not found");
+                return null;
+            }
+            log("ATTACH_SLOT overlay step2: targetDisplay=" + target.getDisplayId()
+                    + " latch setup pkg=" + slot.pkg);
 
             CountDownLatch latch = new CountDownLatch(1);
             AtomicReference<Surface> surfaceRef = new AtomicReference<>();
+            AtomicReference<String> errorRef = new AtomicReference<>();
 
             Runnable attach = () -> {
                 try {
                     Context base = (sSysContext != null) ? sSysContext : sContext;
-                    Context displayCtx = base.createDisplayContext(target);
+                    Context displayCtx = null;
+                    try { displayCtx = base.createDisplayContext(target); }
+                    catch (Exception e) { log("ATTACH_SLOT createDisplayContext: " + e.getMessage()); }
                     boolean hasRes = displayCtx != null && displayCtx.getResources() != null;
                     Context viewCtx = hasRes ? displayCtx : base;
+                    log("ATTACH_SLOT overlay step3: displayCtx=" + (displayCtx != null ? "ok" : "null")
+                            + " resources=" + (hasRes ? "ok" : "null") + " pkg=" + slot.pkg);
 
-                    // AppOps grant (needed as safety net)
+                    // AppOps grant
                     try {
                         Object appOps = sContext.getSystemService(Context.APP_OPS_SERVICE);
                         Method setMode = appOps.getClass().getMethod(
@@ -1422,7 +1433,10 @@ public final class MirrorDaemon {
                         setMode.setAccessible(true);
                         setMode.invoke(appOps, 24, android.os.Process.myUid(),
                                 sContext.getPackageName(), 0);
-                    } catch (Exception ignored) {}
+                        log("ATTACH_SLOT overlay: OP_SYSTEM_ALERT_WINDOW granted");
+                    } catch (Exception appE) {
+                        log("ATTACH_SLOT overlay: AppOps skipped (" + appE.getMessage() + ")");
+                    }
 
                     SurfaceView sv = new SurfaceView(viewCtx);
                     sv.getHolder().setFixedSize(slot.w, slot.h);
@@ -1444,31 +1458,53 @@ public final class MirrorDaemon {
 
                     WindowManager.LayoutParams lp = createOverlayLayoutParams(target, slot.w, slot.h);
                     lp.x = slot.x; lp.y = slot.y;
+                    log("ATTACH_SLOT overlay step4: addView type=" + lp.type
+                            + " at (" + slot.x + "," + slot.y + "," + slot.w + "×" + slot.h + ")");
 
                     WindowManager wm = (displayCtx != null)
                             ? displayCtx.getSystemService(WindowManager.class) : null;
-                    if (wm == null) throw new RuntimeException("WM null for slot " + slot.pkg);
+                    if (wm == null) {
+                        errorRef.set("WM null for display " + target.getDisplayId());
+                        latch.countDown();
+                        return;
+                    }
                     wm.addView(sv, lp);
                     slot.overlayView = sv;
                     slot.overlayWM = wm;
                     log("ATTACH_SLOT overlay added pkg=" + slot.pkg
                             + " at (" + slot.x + "," + slot.y + "," + slot.w + "×" + slot.h + ")");
                 } catch (Exception e) {
-                    log("ATTACH_SLOT overlay error: " + e.getMessage());
+                    log("ATTACH_SLOT overlay error: " + e.getClass().getSimpleName()
+                            + ": " + e.getMessage());
+                    errorRef.set(e.getMessage());
                     latch.countDown();
                 }
             };
 
+            log("ATTACH_SLOT overlay step5: posting Runnable myLooper="
+                    + (Looper.myLooper() != null ? "non-null" : "null"));
             if (Looper.myLooper() == Looper.getMainLooper()) attach.run();
             else new android.os.Handler(Looper.getMainLooper()).post(attach);
 
+            log("ATTACH_SLOT overlay step6: awaiting latch");
             if (!latch.await(2, TimeUnit.SECONDS)) {
                 log("ATTACH_SLOT overlay timeout for " + slot.pkg);
                 return null;
             }
-            return surfaceRef.get();
+            if (errorRef.get() != null) {
+                log("ATTACH_SLOT overlay failed with error: " + errorRef.get());
+                return null;
+            }
+            Surface surface = surfaceRef.get();
+            if (surface == null || !surface.isValid()) {
+                log("ATTACH_SLOT overlay: no valid surface for " + slot.pkg);
+                return null;
+            }
+            log("ATTACH_SLOT overlay surface OK pkg=" + slot.pkg);
+            return surface;
         } catch (Exception e) {
-            log("ATTACH_SLOT overlay exception: " + e.getMessage());
+            log("ATTACH_SLOT overlay exception: " + e.getClass().getSimpleName()
+                    + ": " + e.getMessage());
             return null;
         }
     }
