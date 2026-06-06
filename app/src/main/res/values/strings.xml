@@ -32,6 +32,9 @@
     <string name="sniffer_pill_inactive">○ INACTIF</string>
     <string name="sniffer_idle">Aucune capture en cours.\nAppuie sur Démarrer pour lancer un nouveau fichier BYD_RE_Sniffer_*.txt.</string>
     <string name="sniffer_initializing">Initialisation…</string>
+    <string name="sniffer_checking">Vérification de l\'état du sniffer…</string>
+    <string name="sniffer_active_size_fmt">Capture en cours → %1$s · %2$d KB</string>
+    <string name="sniffer_bg_failed">Logcat non démarré — relancer la capture</string>
     <string name="sniffer_active_fmt">Capture en cours → %1$s</string>
     <string name="sniffer_active_detail_fmt">Reprise : %1$s (%2$d KB)</string>
     <string name="sniffer_previous_stopped_fmt">Capture précédente arrêtée : %1$s (%2$d KB)</string>

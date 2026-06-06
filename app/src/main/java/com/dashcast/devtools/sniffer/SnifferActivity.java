@@ -5,6 +5,8 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -26,9 +28,9 @@ import java.util.Locale;
  * SnifferActivity — continuous logcat + dumpsys snapshots into a single
  * BYD_RE_Sniffer_*.txt file in this app's external files dir.
  *
- * <p>Background processes use {@code setsid} so they survive Activity
- * destruction (rotation, app paused, even Activity finished). State is
- * restored from SharedPreferences on each onCreate.
+ * <p>Background processes use {@code nohup} + {@code setsid} so they survive
+ * Activity destruction (rotation, app paused, even Activity finished). State
+ * is restored from SharedPreferences on each onCreate.
  *
  * <p>Lifted from DashCast's DiagActivity sniffer section.
  */
@@ -42,6 +44,9 @@ public class SnifferActivity extends Activity {
     private static final String PREF_SNIFFER      = "sniffer_prefs";
     private static final String PREF_SNIFFER_PATH = "re_sniffer_file_path";
 
+    private static final int SIZE_REFRESH_MS = 5_000;
+    private static final int BG_CHECK_MS     = 8_000;
+
     private TextView tvStatusPill;
     private TextView tvStatus;
     private Button   btnStart;
@@ -50,8 +55,12 @@ public class SnifferActivity extends Activity {
     private Button   btnExport;
     private Button   btnCleanup;
 
-    private volatile File mSnifferFile;
+    private volatile File    mSnifferFile;
     private volatile boolean mDestroyed;
+
+    private final Handler  mHandler            = new Handler(Looper.getMainLooper());
+    private       Runnable mSizeRefreshRunnable;
+    private       Runnable mBgCheckRunnable;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -81,6 +90,8 @@ public class SnifferActivity extends Activity {
     @Override
     protected void onDestroy() {
         mDestroyed = true;
+        stopSizeRefresh();
+        cancelBgCheck();
         super.onDestroy();
     }
 
@@ -103,6 +114,35 @@ public class SnifferActivity extends Activity {
         btnStop.setEnabled(active);
         btnSnapshot.setEnabled(active);
         btnExport.setEnabled(mSnifferFile != null && mSnifferFile.exists() && mSnifferFile.length() > 0);
+        if (active) startSizeRefresh(); else stopSizeRefresh();
+    }
+
+    // Rafraîchit le status toutes les SIZE_REFRESH_MS avec la taille courante du fichier.
+    private void startSizeRefresh() {
+        stopSizeRefresh();
+        mSizeRefreshRunnable = new Runnable() {
+            @Override public void run() {
+                if (mDestroyed || mSnifferFile == null) return;
+                tvStatus.setText(getString(R.string.sniffer_active_size_fmt,
+                        mSnifferFile.getName(), mSnifferFile.length() / 1024));
+                mHandler.postDelayed(this, SIZE_REFRESH_MS);
+            }
+        };
+        mHandler.postDelayed(mSizeRefreshRunnable, SIZE_REFRESH_MS);
+    }
+
+    private void stopSizeRefresh() {
+        if (mSizeRefreshRunnable != null) {
+            mHandler.removeCallbacks(mSizeRefreshRunnable);
+            mSizeRefreshRunnable = null;
+        }
+    }
+
+    private void cancelBgCheck() {
+        if (mBgCheckRunnable != null) {
+            mHandler.removeCallbacks(mBgCheckRunnable);
+            mBgCheckRunnable = null;
+        }
     }
 
     private File buildSnifferFile() {
@@ -126,6 +166,8 @@ public class SnifferActivity extends Activity {
         }
 
         mSnifferFile = f;
+        tvStatus.setText(getString(R.string.sniffer_checking));
+        btnStart.setEnabled(false);
         AdbClient.executeShellWithResult(this,
                 "[ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ] && echo ACTIVE || echo STOPPED",
                 new AdbClient.Callback() {
@@ -144,9 +186,13 @@ public class SnifferActivity extends Activity {
                 });
             }
             @Override public void onError(String err) {
-                safeRunOnUi(() -> setUiActive(false,
-                        getString(R.string.sniffer_previous_no_adb_fmt,
-                                f.getName(), (int) (f.length() / 1024))));
+                // ADB inaccessible : on ne sait pas si le sniffer tourne encore.
+                // On laisse Stop activé pour que l'utilisateur puisse forcer l'arrêt.
+                safeRunOnUi(() -> {
+                    setUiActive(false, getString(R.string.sniffer_previous_no_adb_fmt,
+                            f.getName(), (int) (f.length() / 1024)));
+                    btnStop.setEnabled(true);
+                });
             }
         });
     }
@@ -154,8 +200,6 @@ public class SnifferActivity extends Activity {
     // ─── Start / Stop ───────────────────────────────────────────────────────
 
     private void startSniffer() {
-        killSnifferProcesses();
-
         mSnifferFile = buildSnifferFile();
         getSharedPreferences(PREF_SNIFFER, MODE_PRIVATE).edit()
                 .putString(PREF_SNIFFER_PATH, mSnifferFile.getAbsolutePath()).apply();
@@ -164,22 +208,22 @@ public class SnifferActivity extends Activity {
         AppLogger.i(TAG, "Starting → " + p);
 
         setUiActive(false, getString(R.string.sniffer_initializing));
-        btnStart.setEnabled(false);
 
-        // Snap file : état courant, écrasé à chaque cycle (jamais cumulatif)
         final String pSnap    = p.replace(".txt", "_snap.txt");
         final String pSnapTmp = pSnap + ".tmp";
 
-        // Header : uniquement logcat — les dumpsys vont dans le snap file séparé
+        // Kill + header dans une seule commande shell pour éviter la race condition :
+        // si kill et touch tournaient sur deux threads concurrents, rm -f pouvait
+        // supprimer le sentinel juste après que touch l'ait créé.
         String headerCmd =
-            "logcat -c 2>/dev/null"
+            buildKillCmd()
+            + " ; logcat -c 2>/dev/null"
             + " ; touch /data/local/tmp/" + RE_SNIFFER_TAG
             + " ; echo === BYD RE SNIFFER === > " + p
             + " ; date >> " + p
             + " ; getprop ro.product.model >> " + p
             + " ; getprop ro.build.fingerprint >> " + p
             + " ; echo === LIVE CAPTURE START === >> " + p
-            // Snapshot initial → snap file (overwrite)
             + " ; printf '=== SNAP INITIAL %s ===\\n' $(date +%H:%M:%S) > " + pSnapTmp
             + " ; dumpsys display 2>/dev/null >> " + pSnapTmp
             + " ; dumpsys SurfaceFlinger 2>/dev/null >> " + pSnapTmp
@@ -191,10 +235,12 @@ public class SnifferActivity extends Activity {
 
         AdbClient.executeShellWithResult(this, headerCmd, new AdbClient.Callback() {
             @Override public void onSuccess(String out) {
-                // Snap loop : écrase le snap file toutes les 60s (via tmp pour atomicité)
+                // Les double-quotes à l'intérieur d'un sh -c '...' sont littérales
+                // pour le shell externe. Le shell interne les évalue correctement.
+                // On évite ainsi le conflit de single-quotes avec printf '...'.
                 String snapLoop =
                     "while [ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ]; do sleep 60;"
-                    + " printf '=== SNAP %s ===\\n' $(date +%H:%M:%S) > " + pSnapTmp + ";"
+                    + " printf \"=== SNAP %s ===\\n\" $(date +%H:%M:%S) > " + pSnapTmp + ";"
                     + " dumpsys display 2>/dev/null >> " + pSnapTmp + ";"
                     + " dumpsys SurfaceFlinger 2>/dev/null >> " + pSnapTmp + ";"
                     + " dumpsys window 2>/dev/null >> " + pSnapTmp + ";"
@@ -204,16 +250,18 @@ public class SnifferActivity extends Activity {
                     + " mv " + pSnapTmp + " " + pSnap + ";"
                     + " done";
 
-                // exec : remplace le shell par logcat — kill -9 $pid tue logcat directement
+                // nohup + setsid : double protection contre SIGHUP à la fermeture
+                // de la session ADB dadb. > /dev/null supprime le nohup.out.
                 String bgCmd =
                     "echo > " + pf
-                    + " ; setsid sh -c 'exec logcat -v threadtime >> " + p + " 2>&1'"
+                    + " ; nohup setsid sh -c 'exec logcat -v threadtime >> " + p + " 2>&1' > /dev/null"
                     + "   & echo $! >> " + pf
-                    + " ; setsid sh -c '" + snapLoop + "'"
+                    + " ; nohup setsid sh -c '" + snapLoop + "' > /dev/null"
                     + "   & echo $! >> " + pf
-                    + " ; setsid sh -c 'exec logcat -b events -v time >> " + p + " 2>&1'"
+                    + " ; nohup setsid sh -c 'exec logcat -b events -v time >> " + p + " 2>&1' > /dev/null"
                     + "   & echo $! >> " + pf;
 
+                final long sizeAfterHeader = mSnifferFile != null ? mSnifferFile.length() : 0;
                 AdbClient.executeShell(SnifferActivity.this, bgCmd);
 
                 safeRunOnUi(() -> {
@@ -221,6 +269,24 @@ public class SnifferActivity extends Activity {
                     Toast.makeText(getApplicationContext(),
                             getString(R.string.sniffer_toast_started_fmt, mSnifferFile.getName()),
                             Toast.LENGTH_LONG).show();
+
+                    // Vérification différée : si le fichier n'a pas grossi après BG_CHECK_MS,
+                    // bgCmd a probablement échoué silencieusement.
+                    // Stocké dans mBgCheckRunnable pour pouvoir l'annuler si Stop
+                    // est tapé avant l'expiration (évite un faux positif).
+                    final File fileRef = mSnifferFile;
+                    cancelBgCheck();
+                    mBgCheckRunnable = () -> {
+                        mBgCheckRunnable = null;
+                        if (mDestroyed || fileRef != mSnifferFile) return;
+                        if (fileRef.length() <= sizeAfterHeader) {
+                            AppLogger.w(TAG, "bgCmd may have failed — file not growing after " + BG_CHECK_MS + "ms");
+                            getSharedPreferences(PREF_SNIFFER, MODE_PRIVATE).edit()
+                                    .remove(PREF_SNIFFER_PATH).apply();
+                            setUiActive(false, getString(R.string.sniffer_bg_failed));
+                        }
+                    };
+                    mHandler.postDelayed(mBgCheckRunnable, BG_CHECK_MS);
                 });
             }
             @Override public void onError(String err) {
@@ -232,20 +298,23 @@ public class SnifferActivity extends Activity {
         });
     }
 
-    private void killSnifferProcesses() {
+    private String buildKillCmd() {
         String pidFile = "/data/local/tmp/" + RE_SNIFFER_PIDS;
-        String killCmd =
-            "rm -f /data/local/tmp/" + RE_SNIFFER_TAG
+        return "rm -f /data/local/tmp/" + RE_SNIFFER_TAG
             + " ; if [ -f " + pidFile + " ]; then"
             + "   while IFS= read -r pid; do"
             + "     [ -n \"$pid\" ] && kill -9 \"$pid\" 2>/dev/null; done < " + pidFile + ";"
             + "   rm -f " + pidFile + ";"
             + " fi"
             + " ; pkill -f " + RE_SNIFFER_PREFIX + " 2>/dev/null; true";
-        AdbClient.executeShell(this, killCmd);
+    }
+
+    private void killSnifferProcesses() {
+        AdbClient.executeShell(this, buildKillCmd());
     }
 
     private void stopSniffer() {
+        cancelBgCheck();
         killSnifferProcesses();
         getSharedPreferences(PREF_SNIFFER, MODE_PRIVATE).edit()
                 .remove(PREF_SNIFFER_PATH).apply();
@@ -261,12 +330,10 @@ public class SnifferActivity extends Activity {
 
     private void snapshotSniffer() {
         if (mSnifferFile == null) return;
-        final String p       = mSnifferFile.getAbsolutePath();
+        final String p        = mSnifferFile.getAbsolutePath();
         final String pSnap    = p.replace(".txt", "_snap.txt");
         final String pSnapTmp = pSnap + ".tmp";
-        // Marquer l'instant dans le log principal (une seule ligne, pas de dumpsys)
         String cmdLog = "printf '\\n=== USER SNAP %s ===\\n' $(date +%H:%M:%S) >> " + p;
-        // Écraser le snap file avec l'état courant (via tmp pour atomicité)
         String cmdSnap =
               "printf '=== USER SNAP %s ===\\n' $(date +%H:%M:%S) > " + pSnapTmp
             + " ; dumpsys display 2>/dev/null >> " + pSnapTmp
@@ -320,7 +387,6 @@ public class SnifferActivity extends Activity {
         File dir = getExternalFilesDir(null);
         if (dir == null) dir = getFilesDir();
         int deleted = 0;
-        // Exclure le log ET le snap file de la session courante
         String currentSnapPath = mSnifferFile != null
                 ? mSnifferFile.getAbsolutePath().replace(".txt", "_snap.txt") : null;
         File[] all = dir.listFiles();
