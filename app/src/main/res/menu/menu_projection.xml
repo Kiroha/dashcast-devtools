@@ -3,9 +3,15 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <item
+        android:id="@+id/action_layouts"
+        android:icon="@drawable/ic_fission"
+        android:title="Layouts"
+        app:showAsAction="always" />
+
+    <item
         android:id="@+id/action_overlay_sizing"
         android:icon="@drawable/ic_settings"
         android:title="Ajuster l'overlay"
-        app:showAsAction="always" />
+        app:showAsAction="ifRoom" />
 
 </menu>

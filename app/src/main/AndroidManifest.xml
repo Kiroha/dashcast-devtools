@@ -60,6 +60,11 @@
             android:screenOrientation="landscape" />
 
         <activity
+            android:name=".layout.ClusterLayoutEditorActivity"
+            android:exported="false"
+            android:screenOrientation="landscape" />
+
+        <activity
             android:name=".dilink.DiLink2Activity"
             android:exported="false"
             android:screenOrientation="landscape" />

@@ -150,6 +150,18 @@ public final class MirrorDaemon {
      * Reply: writeNoException() + writeInt(1).
      */
     public static final int TRANSACT_RELEASE_SLOT = 11;
+    /**
+     * TRANSACT 12 — active un layout persistant : crée N overlays+VDs.
+     * Wire: writeInterfaceToken + writeInt(N) + [x,y,w,h]×N
+     * Reply: writeNoException + writeInt(N) + [displayId]×N
+     */
+    public static final int TRANSACT_ACTIVATE_LAYOUT = 12;
+    /**
+     * TRANSACT 13 — désactive le layout persistant (libère VDs layout).
+     * Wire: writeInterfaceToken
+     * Reply: writeNoException + writeInt(1)
+     */
+    public static final int TRANSACT_DEACTIVATE_LAYOUT = 13;
 
     // ── SlotInfo — one overlay+VD pair per running app ───────────────────────
 
@@ -253,7 +265,9 @@ public final class MirrorDaemon {
                 case TRANSACT_RESIZE_OVERLAY:   return handleResizeOverlay(data, reply);
                 case TRANSACT_RESIZE_SLOT:      return handleResizeSlot(data, reply);
                 case TRANSACT_ATTACH_SLOT:      return handleAttachSlot(data, reply);
-                case TRANSACT_RELEASE_SLOT:     return handleReleaseSlot(data, reply);
+                case TRANSACT_RELEASE_SLOT:       return handleReleaseSlot(data, reply);
+                case TRANSACT_ACTIVATE_LAYOUT:    return handleActivateLayout(data, reply);
+                case TRANSACT_DEACTIVATE_LAYOUT:  return handleDeactivateLayout(data, reply);
                 default: return super.onTransact(code, data, reply, flags);
             }
         }
@@ -1349,6 +1363,50 @@ public final class MirrorDaemon {
             if (lowered.contains("cluster") || lowered.contains("fission")) return candidate;
         }
         return null;
+    }
+
+
+    private static boolean handleActivateLayout(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        int n = data.readInt();
+        log("ACTIVATE_LAYOUT n=" + n);
+
+        // Libère les slots layout existants (préfixe "layout_")
+        for (String key : new java.util.ArrayList<>(sSlots.keySet())) {
+            if (key.startsWith("layout_")) { sSlots.remove(key).release(); }
+        }
+
+        reply.writeNoException();
+        reply.writeInt(n);
+        for (int i = 0; i < n; i++) {
+            int x = data.readInt(), y = data.readInt();
+            int w = data.readInt(), h = data.readInt();
+            String pkg = "layout_" + i;
+            SlotInfo slot = new SlotInfo(pkg, x, y, w, h);
+            Surface surface = tryAttachSlotOverlay(slot);
+            if (surface == null) {
+                log("ACTIVATE_LAYOUT slot " + i + " overlay failed");
+                reply.writeInt(-1);
+                continue;
+            }
+            int displayId = createTrustedVdForSlot(slot, surface);
+            if (displayId < 0) { slot.release(); reply.writeInt(-1); continue; }
+            sSlots.put(pkg, slot);
+            log("ACTIVATE_LAYOUT slot " + i + " → displayId=" + displayId);
+            reply.writeInt(displayId);
+        }
+        return true;
+    }
+
+    private static boolean handleDeactivateLayout(Parcel data, Parcel reply) {
+        data.enforceInterface(DESCRIPTOR);
+        log("DEACTIVATE_LAYOUT");
+        for (String key : new java.util.ArrayList<>(sSlots.keySet())) {
+            if (key.startsWith("layout_")) { sSlots.remove(key).release(); }
+        }
+        reply.writeNoException();
+        reply.writeInt(1);
+        return true;
     }
 
     /** Libère le slot "__default__" (CLUSTER_ATTACH legacy). */

@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="?android:attr/windowBackground">
+
+    <!-- Toolbar -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar_layout_editor"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:title="Éditeur de layouts cluster"
+        app:navigationIcon="?attr/homeAsUpIndicator"
+        style="@style/Widget.MaterialComponents.Toolbar.Primary"/>
+
+    <!-- Canvas cluster + contrôles en mode édition -->
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="12dp"
+        app:cardCornerRadius="12dp"
+        app:cardElevation="2dp">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp">
+
+            <!-- Canvas interactif du cluster -->
+            <com.dashcast.devtools.layout.ClusterCanvasView
+                android:id="@+id/cluster_canvas"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Dessinez des zones dans la zone noire. Long-press pour supprimer."
+                android:textSize="11sp"
+                android:textColor="?android:attr/textColorSecondary"
+                android:gravity="center"
+                android:paddingTop="4dp"/>
+
+            <!-- Boutons édition -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:paddingTop="8dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_clear_zones"
+                    style="@style/Widget.MaterialComponents.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Tout effacer"
+                    app:icon="@drawable/ic_close"/>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btn_save_layout"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Enregistrer"
+                    app:icon="@drawable/ic_settings"/>
+
+            </LinearLayout>
+        </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Séparateur -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingHorizontal="16dp"
+        android:paddingBottom="4dp"
+        android:text="Layouts sauvegardés"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="?android:attr/textColorSecondary"/>
+
+    <!-- Liste des layouts -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:id="@+id/ll_layouts"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="8dp"/>
+
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Bouton mode libre -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btn_free_mode"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_margin="12dp"
+        android:text="Désactiver layout → Mode libre"/>
+
+</LinearLayout>

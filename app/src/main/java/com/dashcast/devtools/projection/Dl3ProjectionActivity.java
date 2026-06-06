@@ -216,6 +216,17 @@ public class Dl3ProjectionActivity extends Activity {
                 showOverlaySizingDialog();
                 return true;
             }
+            if (item.getItemId() == R.id.action_layouts) {
+                com.dashcast.devtools.layout.ClusterLayoutEditorActivity.sDaemonBinder = mDaemonBinder;
+                android.content.Intent intent = new android.content.Intent(
+                        this, com.dashcast.devtools.layout.ClusterLayoutEditorActivity.class);
+                intent.putExtra("marginTop",    mMarginTop);
+                intent.putExtra("marginBottom", mMarginBottom);
+                intent.putExtra("marginLeft",   mMarginLeft);
+                intent.putExtra("marginRight",  mMarginRight);
+                startActivity(intent);
+                return true;
+            }
             return false;
         });
 
