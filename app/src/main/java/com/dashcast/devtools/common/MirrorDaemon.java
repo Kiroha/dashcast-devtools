@@ -510,23 +510,58 @@ public final class MirrorDaemon {
                 sb.append("resolve-activity exception: ").append(e.getMessage()).append("\n");
             }
 
-            // Step 2 — launch on display 0 (no --display to bypass ATMS canPlaceEntityOnDisplay)
-            if (component != null) {
-                Process p2 = Runtime.getRuntime().exec(new String[]{"am", "start", "-n", component});
-                p2.waitFor();
-                sb.append("Strategy 1 (am start -n ").append(component).append("): launched\n");
-            } else {
-                // Fallback: am start by package
-                Process p2 = Runtime.getRuntime().exec(
-                        new String[]{"am", "start", "-a", "android.intent.action.MAIN", pkg});
-                p2.waitFor();
-                sb.append("Strategy 2 (am start -a MAIN ").append(pkg).append("): launched\n");
-            }
-
-            // Step 3 — poll for task ID (up to 15 × 500 ms, same as OpenBYD)
+            // IATM — déclaré ici pour être disponible dès Step 2a
             Class<?> atmCls  = Class.forName("android.app.ActivityTaskManager");
             Object   iatm    = atmCls.getMethod("getService").invoke(null);
             Class<?> iatmCls = iatm.getClass();
+
+            // Step 2a — essaie setDisplayToSingleTaskInstance + lancement direct (DashCast pattern)
+            // Si le display accepte les apps non-resizable directement, pas besoin du dance
+            // launch-on-0-then-move. Le watchdog reste actif comme fallback de re-move.
+            boolean directLaunchAttempted = false;
+            try {
+                java.lang.reflect.Method setDTSI = null;
+                for (java.lang.reflect.Method m : getAllMethods(iatmCls)) {
+                    if (m.getName().equals("setDisplayToSingleTaskInstance")
+                            && m.getParameterTypes().length == 1
+                            && m.getParameterTypes()[0] == int.class) {
+                        setDTSI = m; break;
+                    }
+                }
+                if (setDTSI != null) {
+                    setDTSI.setAccessible(true);
+                    setDTSI.invoke(iatm, displayId);
+                    sb.append("setDisplayToSingleTaskInstance(").append(displayId).append(") OK\n");
+                    if (component != null) {
+                        Process pd = Runtime.getRuntime().exec(new String[]{
+                            "am", "start", "--display", String.valueOf(displayId),
+                            "--windowingMode", "5", "-n", component});
+                        pd.waitFor();
+                        sb.append("Direct launch on display ").append(displayId).append("\n");
+                        directLaunchAttempted = true;
+                    }
+                } else {
+                    sb.append("setDisplayToSingleTaskInstance: not found, using fallback\n");
+                }
+            } catch (Exception eDtsi) {
+                sb.append("setDisplayToSingleTaskInstance failed: ").append(eDtsi.getMessage()).append("\n");
+            }
+
+            // Step 2b — fallback : launch on display 0 then move (chemin classique)
+            if (!directLaunchAttempted) {
+                if (component != null) {
+                    Process p2 = Runtime.getRuntime().exec(new String[]{"am", "start", "-n", component});
+                    p2.waitFor();
+                    sb.append("Strategy 1 (am start -n ").append(component).append("): launched\n");
+                } else {
+                    Process p2 = Runtime.getRuntime().exec(
+                            new String[]{"am", "start", "-a", "android.intent.action.MAIN", pkg});
+                    p2.waitFor();
+                    sb.append("Strategy 2 (am start -a MAIN ").append(pkg).append("): launched\n");
+                }
+            }
+
+            // Step 3 — poll for task ID (up to 15 × 500 ms, same as OpenBYD)
 
             // Find getTasks — try (int, boolean, boolean) first, then (int)
             java.lang.reflect.Method getTasks = null;
