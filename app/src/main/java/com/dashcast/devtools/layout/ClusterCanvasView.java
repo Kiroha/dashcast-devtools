@@ -40,6 +40,9 @@ public class ClusterCanvasView extends View {
     // Rayon en pixels vue pour détecter un coin (resize handle)
     private static final float HANDLE_RADIUS = 32f;
 
+    // Seuil de snap en coordonnées cluster
+    private static final float SNAP_THRESHOLD = 30f;
+
     private final Paint mPaintXdja   = new Paint();
     private final Paint mPaintFill   = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mPaintStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -255,9 +258,11 @@ public class ClusterCanvasView extends View {
                 }
                 // Priorité 3 : zone vide → dessine
                 if (isInProjectionZone(vx, vy)) {
-                    mDragMode    = DragMode.DRAW;
-                    mDragStartX  = vx; mDragStartY = vy;
-                    mCurrentRect = new RectF(vx, vy, vx, vy);
+                    mDragMode = DragMode.DRAW;
+                    // Snap le point de départ
+                    mDragStartX = snapX(vx / mScaleX, -1) * mScaleX;
+                    mDragStartY = snapY(vy / mScaleY, -1) * mScaleY;
+                    mCurrentRect = new RectF(mDragStartX, mDragStartY, mDragStartX, mDragStartY);
                 }
                 return true;
             }
@@ -271,6 +276,12 @@ public class ClusterCanvasView extends View {
                     // Clamp dans la zone de projection
                     nx = Math.max(mLeft, Math.min(nx, CW - mRight  - s.w));
                     ny = Math.max(mTop,  Math.min(ny, CH - mBottom - s.h));
+                    // Snap bord à bord (les deux bords concourent)
+                    nx = snapEdgeX(nx, nx + s.w, mDragIdx);
+                    ny = snapEdgeY(ny, ny + s.h, mDragIdx);
+                    // Re-clamp après snap
+                    nx = Math.max(mLeft, Math.min(nx, CW - mRight  - s.w));
+                    ny = Math.max(mTop,  Math.min(ny, CH - mBottom - s.h));
                     s.x = (int) nx; s.y = (int) ny;
                     invalidate();
                     return true;
@@ -281,6 +292,9 @@ public class ClusterCanvasView extends View {
                     LayoutPreset.SlotDef s = mSlots.get(mDragIdx);
                     float cx = clampX(vx) / mScaleX;
                     float cy = clampY(vy) / mScaleY;
+                    // Snap le coin en cours de déplacement
+                    cx = snapX(cx, mDragIdx);
+                    cy = snapY(cy, mDragIdx);
                     int r = s.x + s.w, b = s.y + s.h;
                     switch (mResizeCorner) {
                         case 0: // TL : déplace le coin supérieur gauche
@@ -309,8 +323,11 @@ public class ClusterCanvasView extends View {
 
                 if (mDragMode == DragMode.DRAW && mCurrentRect != null) {
                     float x = clampX(vx), y = clampY(vy);
-                    mCurrentRect.set(Math.min(mDragStartX, x), Math.min(mDragStartY, y),
-                                     Math.max(mDragStartX, x), Math.max(mDragStartY, y));
+                    // Snap le coin mobile (en cluster, puis retour en vue)
+                    float xSnap = snapX(x / mScaleX, -1) * mScaleX;
+                    float ySnap = snapY(y / mScaleY, -1) * mScaleY;
+                    mCurrentRect.set(Math.min(mDragStartX, xSnap), Math.min(mDragStartY, ySnap),
+                                     Math.max(mDragStartX, xSnap), Math.max(mDragStartY, ySnap));
                     invalidate();
                 }
                 return true;
@@ -380,5 +397,65 @@ public class ClusterCanvasView extends View {
              && vy >= s.y * mScaleY && vy <= (s.y + s.h) * mScaleY) return i;
         }
         return -1;
+    }
+
+    // ── Snap bord à bord ─────────────────────────────────────────────────────
+
+    /** Snap x (cluster) vers le bord de projection ou d'une autre zone le plus proche. */
+    private float snapX(float x, int excludeIdx) {
+        float best = x, bestDist = SNAP_THRESHOLD;
+        for (float c : new float[]{ mLeft, CW - mRight }) {
+            float d = Math.abs(x - c);
+            if (d < bestDist) { bestDist = d; best = c; }
+        }
+        List<LayoutPreset.SlotDef> slots = mSlots;
+        if (slots != null) {
+            for (int i = 0; i < slots.size(); i++) {
+                if (i == excludeIdx) continue;
+                LayoutPreset.SlotDef s = slots.get(i);
+                for (float c : new float[]{ s.x, s.x + s.w }) {
+                    float d = Math.abs(x - c);
+                    if (d < bestDist) { bestDist = d; best = c; }
+                }
+            }
+        }
+        return best;
+    }
+
+    private float snapY(float y, int excludeIdx) {
+        float best = y, bestDist = SNAP_THRESHOLD;
+        for (float c : new float[]{ mTop, CH - mBottom }) {
+            float d = Math.abs(y - c);
+            if (d < bestDist) { bestDist = d; best = c; }
+        }
+        List<LayoutPreset.SlotDef> slots = mSlots;
+        if (slots != null) {
+            for (int i = 0; i < slots.size(); i++) {
+                if (i == excludeIdx) continue;
+                LayoutPreset.SlotDef s = slots.get(i);
+                for (float c : new float[]{ s.y, s.y + s.h }) {
+                    float d = Math.abs(y - c);
+                    if (d < bestDist) { bestDist = d; best = c; }
+                }
+            }
+        }
+        return best;
+    }
+
+    /**
+     * Pour MOVE : choisit le snap qui déplace le moins la zone,
+     * en considérant le bord avant (a) et le bord arrière (b = a + taille).
+     * Retourne la nouvelle valeur du bord avant.
+     */
+    private float snapEdgeX(float a, float b, int excludeIdx) {
+        float offA = snapX(a, excludeIdx) - a;
+        float offB = snapX(b, excludeIdx) - b;
+        return Math.abs(offA) <= Math.abs(offB) ? a + offA : a + offB;
+    }
+
+    private float snapEdgeY(float a, float b, int excludeIdx) {
+        float offA = snapY(a, excludeIdx) - a;
+        float offB = snapY(b, excludeIdx) - b;
+        return Math.abs(offA) <= Math.abs(offB) ? a + offA : a + offB;
     }
 }
