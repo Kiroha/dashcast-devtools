@@ -199,7 +199,8 @@ public class ClusterLayoutEditorActivity extends Activity {
                     }
                 }
                 mActiveId = preset.id;
-                sActiveSlots = new ArrayList<>(preset.slots);
+                sActiveSlots = java.util.Collections.unmodifiableList(
+                        new ArrayList<>(preset.slots));
                 getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE).edit()
                         .putString(ACTIVE_KEY, mActiveId).apply();
 
@@ -357,7 +358,7 @@ public class ClusterLayoutEditorActivity extends Activity {
             MaterialButton btnDelete   = row.findViewById(R.id.btn_delete_layout);
             LinearLayout   llActive   = row.findViewById(R.id.ll_active_slots);
 
-            boolean isActive = preset.id.equals(mActiveId);
+            boolean isActive = mActiveId != null && mActiveId.equals(preset.id);
             tvName.setText(preset.name + (isActive ? "  ●" : ""));
             tvSlots.setText(preset.slots.size() + " zones");
 

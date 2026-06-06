@@ -1090,6 +1090,10 @@ public final class MirrorDaemon {
         final CountDownLatch latch = new CountDownLatch(1);
         new android.os.Handler(Looper.getMainLooper()).post(() -> {
             try {
+                if (slot.overlayWM == null || slot.overlayView == null) {
+                    log("RESIZE_OVERLAY: slot[" + slot.pkg + "] overlay already released — skip");
+                    return;
+                }
                 WindowManager.LayoutParams lp = createOverlayLayoutParams(null, w, h);
                 lp.x = x; lp.y = y; lp.width = w; lp.height = h;
                 slot.overlayWM.updateViewLayout(slot.overlayView, lp);

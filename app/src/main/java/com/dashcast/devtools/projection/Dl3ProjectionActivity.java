@@ -169,8 +169,10 @@ public class Dl3ProjectionActivity extends Activity {
 
         // Intervalles horizontaux occupés, triés par left
         List<int[]> occupied = new ArrayList<>();
-        for (SlotState s : mSlots.values()) {
-            occupied.add(new int[]{s.rect.left, s.rect.right});
+        synchronized (mSlots) {
+            for (SlotState s : mSlots.values()) {
+                occupied.add(new int[]{s.rect.left, s.rect.right});
+            }
         }
         Collections.sort(occupied, (a, b) -> a[0] - b[0]);
 
@@ -528,7 +530,7 @@ public class Dl3ProjectionActivity extends Activity {
                 mDaemonBinder.transact(MirrorDaemon.TRANSACT_ATTACH_SLOT, data, reply, 0);
                 reply.readException();
                 if (reply.readInt() != 1) throw new RuntimeException("ATTACH_SLOT failed");
-                reply.readParcelable(Surface.class.getClassLoader()); // surface (unused client-side)
+                reply.readParcelable(Surface.class.getClassLoader()); // daemon-owned surface, read to advance parcel
                 displayId = reply.readInt();
                 if (displayId < 0) throw new RuntimeException("ATTACH_SLOT: invalid displayId");
                 AppLogger.d(TAG, "ATTACH_SLOT OK pkg=" + pkg + " displayId=" + displayId);
@@ -873,10 +875,12 @@ public class Dl3ProjectionActivity extends Activity {
      * Wire INJECT_MOTION : writeInt(displayId) + writeParcelable(event).
      */
     private int findDisplayIdForCoord(float cx, float cy) {
-        for (SlotState s : mSlots.values()) {
-            if (s.rect.contains((int) cx, (int) cy)) return s.displayId;
+        synchronized (mSlots) {
+            for (SlotState s : mSlots.values()) {
+                if (s.rect.contains((int) cx, (int) cy)) return s.displayId;
+            }
+            if (!mSlots.isEmpty()) return mSlots.values().iterator().next().displayId;
         }
-        if (!mSlots.isEmpty()) return mSlots.values().iterator().next().displayId;
         return mVdDisplayId;
     }
 
