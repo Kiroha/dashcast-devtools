@@ -158,15 +158,37 @@ public class Dl3ProjectionActivity extends Activity {
                 CLUSTER_W - mMarginRight, CLUSTER_H - mMarginBottom);
     }
 
-    /** Zone libre = zone effective moins les rects déjà occupés (algo simple left/right). */
+    /**
+     * Zone libre = plus grand segment horizontal contigu non couvert par un slot existant.
+     * Fonctionne pour N slots : trie les intervalles occupés, cherche le plus grand écart.
+     */
     private Rect availableRect() {
-        Rect full = effectiveRect();
+        Rect eff = effectiveRect();
+        if (mSlots.isEmpty()) return eff;
+
+        // Intervalles horizontaux occupés, triés par left
+        List<int[]> occupied = new ArrayList<>();
         for (SlotState s : mSlots.values()) {
-            // Si un slot occupe la moitié gauche → la droite est libre et vice-versa
-            if (s.rect.left <= full.left && s.rect.right < full.right) full.left  = s.rect.right;
-            else if (s.rect.right >= full.right && s.rect.left > full.left) full.right = s.rect.left;
+            occupied.add(new int[]{s.rect.left, s.rect.right});
         }
-        return (full.width() > 0 && full.height() > 0) ? full : null;
+        Collections.sort(occupied, (a, b) -> a[0] - b[0]);
+
+        // Cherche le plus grand segment libre entre les intervalles
+        int bestL = eff.left, bestR = eff.left; // width = 0 → rien trouvé
+        int cursor = eff.left;
+        for (int[] iv : occupied) {
+            int freeEnd = Math.min(iv[0], eff.right);
+            if (freeEnd > cursor && (freeEnd - cursor) > (bestR - bestL)) {
+                bestL = cursor; bestR = freeEnd;
+            }
+            cursor = Math.max(cursor, iv[1]);
+        }
+        // Segment après le dernier intervalle
+        if (cursor < eff.right && (eff.right - cursor) > (bestR - bestL)) {
+            bestL = cursor; bestR = eff.right;
+        }
+
+        return (bestR > bestL) ? new Rect(bestL, eff.top, bestR, eff.bottom) : null;
     }
 
     private final Handler         mUiHandler = new Handler(Looper.getMainLooper());
@@ -247,10 +269,6 @@ public class Dl3ProjectionActivity extends Activity {
 
     private void pickAppThenStart() {
         if (!mSurfaceReady) return;
-        if (mSlots.size() >= 2) {
-            Toast.makeText(this, "Maximum 2 apps sur le cluster", Toast.LENGTH_SHORT).show();
-            return;
-        }
         PackageManager pm = getPackageManager();
         Intent main = new Intent(Intent.ACTION_MAIN);
         main.addCategory(Intent.CATEGORY_LAUNCHER);
