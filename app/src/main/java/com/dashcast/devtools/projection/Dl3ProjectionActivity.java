@@ -281,6 +281,20 @@ public class Dl3ProjectionActivity extends Activity {
 
     // ── App picker ────────────────────────────────────────────────────────────
 
+    /** Charge tous les presets sauvegardés depuis les SharedPreferences. */
+    private java.util.List<com.dashcast.devtools.layout.LayoutPreset> loadAllPresets() {
+        java.util.List<com.dashcast.devtools.layout.LayoutPreset> result = new ArrayList<>();
+        try {
+            android.content.SharedPreferences prefs =
+                    getSharedPreferences("cluster_layouts_v1", MODE_PRIVATE);
+            org.json.JSONArray arr = new org.json.JSONArray(prefs.getString("presets", "[]"));
+            for (int i = 0; i < arr.length(); i++) {
+                result.add(com.dashcast.devtools.layout.LayoutPreset.fromJson(arr.getJSONObject(i)));
+            }
+        } catch (Exception ignored) {}
+        return result;
+    }
+
     private void pickAppThenStart() {
         if (!mSurfaceReady) return;
         PackageManager pm = getPackageManager();
@@ -314,19 +328,42 @@ public class Dl3ProjectionActivity extends Activity {
             String lbl = sorted.get(i).getValue();
             labels[i] = (isNavApp(pkgs[i]) ? "🧭 " : "") + lbl + "  —  " + pkgs[i];
         }
+        java.util.List<com.dashcast.devtools.layout.LayoutPreset> presets = loadAllPresets();
         new AlertDialog.Builder(this)
                 .setTitle(R.string.diag_dl50_fission_pick_title)
                 .setItems(labels, (d, which) -> {
                     if (which >= 0 && which < pkgs.length) {
-                        String pkg2  = pkgs[which];
-                        String lbl2  = sorted.get(which).getValue();
-                        java.util.List<com.dashcast.devtools.layout.LayoutPreset.SlotDef> active =
-                                com.dashcast.devtools.layout.ClusterLayoutEditorActivity.sActiveSlots;
-                        if (active != null && !active.isEmpty()) {
-                            showLayoutZonePicker(pkg2, lbl2, active);
+                        String pkg2 = pkgs[which];
+                        String lbl2 = sorted.get(which).getValue();
+                        if (!presets.isEmpty()) {
+                            showLayoutOrFreePicker(pkg2, lbl2, presets);
                         } else {
                             resolveRectThenStart(pkg2, lbl2);
                         }
+                    }
+                })
+                .setNegativeButton(android.R.string.cancel, null)
+                .show();
+    }
+
+    /**
+     * Propose d'abord de choisir un layout (ou mode libre), puis la zone dans ce layout.
+     */
+    private void showLayoutOrFreePicker(String pkg, String appLabel,
+            java.util.List<com.dashcast.devtools.layout.LayoutPreset> presets) {
+        String[] names = new String[presets.size() + 1];
+        names[0] = "Mode libre (automatique)";
+        for (int i = 0; i < presets.size(); i++) {
+            com.dashcast.devtools.layout.LayoutPreset p = presets.get(i);
+            names[i + 1] = p.name + "  (" + p.slots.size() + " zones)";
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Placer " + appLabel + " dans…")
+                .setItems(names, (d, which) -> {
+                    if (which == 0) {
+                        resolveRectThenStart(pkg, appLabel);
+                    } else {
+                        showLayoutZonePicker(pkg, appLabel, presets.get(which - 1).slots);
                     }
                 })
                 .setNegativeButton(android.R.string.cancel, null)
@@ -345,21 +382,12 @@ public class Dl3ProjectionActivity extends Activity {
         String[] names = new String[slots.size()];
         for (int i = 0; i < slots.size(); i++) {
             com.dashcast.devtools.layout.LayoutPreset.SlotDef s = slots.get(i);
-            names[i] = s.label
-                    + "  (" + s.w + "×" + s.h + ")"
-                    + (s.displayId >= 0 ? "  [VD:" + s.displayId + "]" : "  [non actif]");
+            names[i] = s.label + "  (" + s.w + "×" + s.h + ")";
         }
         new AlertDialog.Builder(this)
                 .setTitle("Lancer " + appLabel + " dans…")
-                .setItems(names, (d, which) -> {
-                    com.dashcast.devtools.layout.LayoutPreset.SlotDef slot = slots.get(which);
-                    if (slot.displayId < 0) {
-                        Toast.makeText(this, "Zone non activée — activez le layout d'abord",
-                                Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    launchInLayoutSlot(pkg, appLabel, slot);
-                })
+                .setItems(names, (d, which) ->
+                        launchInLayoutSlot(pkg, appLabel, slots.get(which)))
                 .setNeutralButton("Mode libre", (d, w) -> resolveRectThenStart(pkg, appLabel))
                 .setNegativeButton("Annuler", null)
                 .show();
@@ -367,6 +395,11 @@ public class Dl3ProjectionActivity extends Activity {
 
     private void launchInLayoutSlot(String pkg, String appLabel,
             com.dashcast.devtools.layout.LayoutPreset.SlotDef slot) {
+        if (slot.displayId < 0) {
+            // Layout not yet activated in daemon — use standard ATTACH_SLOT path with the slot rect
+            startSlot(pkg, appLabel, slot.toRect());
+            return;
+        }
         if (!mSurfaceReady) return;
         setStatus("Lancement de " + appLabel + " dans [" + slot.label + "]...");
         mExec.execute(() -> {
