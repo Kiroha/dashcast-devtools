@@ -127,7 +127,8 @@ public class Dl3ProjectionActivity extends Activity {
     }
 
     /** Slots actifs (ordre d'insertion = ordre de lancement). */
-    private final java.util.LinkedHashMap<String, SlotState> mSlots = new java.util.LinkedHashMap<>();
+    private final java.util.Map<String, SlotState> mSlots =
+            java.util.Collections.synchronizedMap(new java.util.LinkedHashMap<>());
 
     private boolean isNavApp(String pkg) {
         return NAV_PKGS.contains(pkg)
@@ -583,7 +584,7 @@ public class Dl3ProjectionActivity extends Activity {
 
         safeRun(() -> {
             updateSlotsStatus();
-            btnStart.setEnabled(mSurfaceReady && mSlots.size() < 2);
+            btnStart.setEnabled(mSurfaceReady && availableRect() != null);
             btnStop.setEnabled(!mSlots.isEmpty());
         });
     }
@@ -620,7 +621,7 @@ public class Dl3ProjectionActivity extends Activity {
             mProjecting = !mSlots.isEmpty();
             safeRun(() -> {
                 updateSlotsStatus();
-                btnStart.setEnabled(mSurfaceReady && mSlots.size() < 2);
+                btnStart.setEnabled(mSurfaceReady && availableRect() != null);
                 btnStop.setEnabled(!mSlots.isEmpty());
             });
         });
@@ -720,17 +721,7 @@ public class Dl3ProjectionActivity extends Activity {
         AdbClient.executeShell(this, cmd);
     }
 
-    /** Gets Display.getLayerStack() via reflection (@hide method). */
-    private static int getLayerStack(Display d) {
-        try {
-            Method m = Display.class.getDeclaredMethod("getLayerStack");
-            m.setAccessible(true);
-            return (int) m.invoke(d);
-        } catch (Exception e) {
-            AppLogger.w("Dl3ProjectionActivity", "getLayerStack: " + e.getMessage());
-            return -1;
-        }
-    }
+
 
     // ── Touch forwarding ──────────────────────────────────────────────────────
 

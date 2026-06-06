@@ -95,6 +95,15 @@ public class ClusterCanvasView extends View {
         } catch (Exception ignored) {}
     }
 
+    @Override
+    protected void onDetachedFromWindow() {
+        super.onDetachedFromWindow();
+        if (mBg != null && !mBg.isRecycled()) {
+            mBg.recycle();
+            mBg = null;
+        }
+    }
+
     public void setMargins(int top, int bottom, int left, int right) {
         mTop = top; mBottom = bottom; mLeft = left; mRight = right;
         invalidate();
@@ -138,10 +147,11 @@ public class ClusterCanvasView extends View {
         if (mLeft   > 0) c.drawRect(0,  py, px, pb, mPaintXdja);
         if (mRight  > 0) c.drawRect(pr, py, vw, pb, mPaintXdja);
 
-        // Zones du layout
-        if (mSlots != null) {
-            for (int i = 0; i < mSlots.size(); i++) {
-                LayoutPreset.SlotDef s = mSlots.get(i);
+        // Zones du layout — snapshot local pour éviter la race avec setSlots()
+        java.util.List<LayoutPreset.SlotDef> slots = mSlots;
+        if (slots != null && !slots.isEmpty()) {
+            for (int i = 0; i < slots.size(); i++) {
+                LayoutPreset.SlotDef s = slots.get(i);
                 int col = ZONE_COLORS[i % ZONE_COLORS.length];
                 mPaintFill.setColor(col);
                 mPaintStroke.setColor(col | 0xFF000000);
@@ -226,9 +236,10 @@ public class ClusterCanvasView extends View {
     private float clampX(float x) { return Math.max(mLeft*mScaleX, Math.min(x, getWidth()-mRight*mScaleX)); }
     private float clampY(float y) { return Math.max(mTop*mScaleY,  Math.min(y, getHeight()-mBottom*mScaleY)); }
     private int hitTest(float vx, float vy) {
-        if (mSlots == null) return -1;
-        for (int i = mSlots.size()-1; i >= 0; i--) {
-            LayoutPreset.SlotDef s = mSlots.get(i);
+        java.util.List<LayoutPreset.SlotDef> slots = mSlots;
+        if (slots == null) return -1;
+        for (int i = slots.size()-1; i >= 0; i--) {
+            LayoutPreset.SlotDef s = slots.get(i);
             if (vx >= s.x*mScaleX && vx <= (s.x+s.w)*mScaleX
              && vy >= s.y*mScaleY && vy <= (s.y+s.h)*mScaleY) return i;
         }

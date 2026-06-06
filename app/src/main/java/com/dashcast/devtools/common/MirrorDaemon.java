@@ -260,7 +260,11 @@ public final class MirrorDaemon {
                 case TRANSACT_MIRROR_STOP:     return handleMirrorStop(data, reply);
                 case TRANSACT_CLUSTER_ATTACH:  return handleClusterAttach(data, reply);
                 case TRANSACT_INJECT_MOTION:   return handleInjectMotion(data, reply);
-                // TRANSACT_CREATE_VD (6) deprecated — fall through to default
+                case TRANSACT_CREATE_VD:
+                    // Deprecated — return error reply so client gets a clear signal
+                    data.enforceInterface(DESCRIPTOR);
+                    log("TRANSACT_CREATE_VD (6) called — deprecated, ignoring");
+                    reply.writeNoException(); reply.writeInt(-1); return true;
                 case TRANSACT_LAUNCH_AND_FORCE: return handleLaunchAndForce(data, reply);
                 case TRANSACT_RESIZE_OVERLAY:   return handleResizeOverlay(data, reply);
                 case TRANSACT_RESIZE_SLOT:      return handleResizeSlot(data, reply);
@@ -1047,15 +1051,13 @@ public final class MirrorDaemon {
             DisplayManager dm = sContext.getSystemService(DisplayManager.class);
             VirtualDisplay vd = null;
             try {
-                vd = dm.createVirtualDisplay(
-                        "devtools_slot_" + slot.pkg, slot.w, slot.h, 160, surface, 1346);
-                if (vd != null) log("ATTACH_SLOT VD TRUSTED OK pkg=" + slot.pkg);
+                vd = dm.createVirtualDisplay(vdName, slot.w, slot.h, 160, surface, 1346);
+                if (vd != null) log("ATTACH_SLOT VD TRUSTED OK name=" + vdName);
             } catch (Exception e) {
                 log("ATTACH_SLOT VD TRUSTED failed, fallback 322: " + e.getMessage());
             }
             if (vd == null) {
-                vd = dm.createVirtualDisplay(
-                        "devtools_slot_" + slot.pkg, slot.w, slot.h, 160, surface, 322);
+                vd = dm.createVirtualDisplay(vdName, slot.w, slot.h, 160, surface, 322);
             }
             if (vd == null) return -1;
             slot.vd = vd;
@@ -1377,7 +1379,7 @@ public final class MirrorDaemon {
 
         // Libère les slots layout existants (préfixe "layout_")
         for (String key : new java.util.ArrayList<>(sSlots.keySet())) {
-            if (key.startsWith("layout_")) { sSlots.remove(key).release(); }
+            if (key.startsWith("layout_")) { SlotInfo _s = sSlots.remove(key); if (_s != null) _s.release(); }
         }
 
         reply.writeNoException();
@@ -1408,7 +1410,7 @@ public final class MirrorDaemon {
         data.enforceInterface(DESCRIPTOR);
         log("DEACTIVATE_LAYOUT");
         for (String key : new java.util.ArrayList<>(sSlots.keySet())) {
-            if (key.startsWith("layout_")) { sSlots.remove(key).release(); }
+            if (key.startsWith("layout_")) { SlotInfo _s = sSlots.remove(key); if (_s != null) _s.release(); }
         }
         reply.writeNoException();
         reply.writeInt(1);

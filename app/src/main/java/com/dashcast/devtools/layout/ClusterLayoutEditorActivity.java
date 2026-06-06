@@ -36,8 +36,8 @@ public class ClusterLayoutEditorActivity extends Activity {
     private static final String ACTIVE_KEY = "active_layout_id";
 
     // Partagé avec Dl3ProjectionActivity pour le zone picker
-    public static IBinder                      sDaemonBinder;
-    public static List<LayoutPreset.SlotDef>   sActiveSlots;
+    public static volatile IBinder                    sDaemonBinder;
+    public static volatile List<LayoutPreset.SlotDef> sActiveSlots;
 
     private ClusterCanvasView  mCanvas;
     private LinearLayout       mLlLayouts;
@@ -190,10 +190,13 @@ public class ClusterLayoutEditorActivity extends Activity {
                 reply.readException();
                 int n = reply.readInt();
                 boolean ok = true;
-                for (int i = 0; i < n && i < preset.slots.size(); i++) {
-                    int displayId = reply.readInt();
-                    preset.slots.get(i).displayId = displayId;
-                    if (displayId < 0) ok = false;
+                // Daemon returns exactly n displayIds; read them all defensively
+                for (int i = 0; i < n; i++) {
+                    int displayId = reply.dataAvail() > 0 ? reply.readInt() : -1;
+                    if (i < preset.slots.size()) {
+                        preset.slots.get(i).displayId = displayId;
+                        if (displayId < 0) ok = false;
+                    }
                 }
                 mActiveId = preset.id;
                 sActiveSlots = new ArrayList<>(preset.slots);
@@ -243,15 +246,71 @@ public class ClusterLayoutEditorActivity extends Activity {
     // ── Assignation d'app à un slot activé ───────────────────────────────────
 
     private void assignApp(LayoutPreset.SlotDef slot) {
-        IBinder binder = sDaemonBinder;
-        if (binder == null || slot.displayId < 0) {
-            Toast.makeText(this, "Slot non actif", Toast.LENGTH_SHORT).show();
+        if (slot.displayId < 0) {
+            Toast.makeText(this, "Zone [" + slot.label + "] non activée — activez le layout d'abord",
+                    Toast.LENGTH_SHORT).show();
             return;
         }
-        // Lance le picker d'apps via un Intent retour vers Dl3ProjectionActivity
-        // (ou directement ici si on veut)
-        Toast.makeText(this, "Slot " + slot.label + " → displayId=" + slot.displayId
-                + "\nUtilisez 'Lancer une app' dans la projection", Toast.LENGTH_LONG).show();
+        // Ouvre directement le picker d'app pour ce slot
+        android.content.pm.PackageManager pm = getPackageManager();
+        android.content.Intent main = new android.content.Intent(android.content.Intent.ACTION_MAIN);
+        main.addCategory(android.content.Intent.CATEGORY_LAUNCHER);
+        java.util.List<android.content.pm.ResolveInfo> infos = pm.queryIntentActivities(main, 0);
+        if (infos == null || infos.isEmpty()) {
+            Toast.makeText(this, "Aucune app disponible", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        java.util.Map<String, String> pkgToLabel = new java.util.LinkedHashMap<>();
+        String self = getPackageName();
+        for (android.content.pm.ResolveInfo ri : infos) {
+            if (ri.activityInfo == null) continue;
+            String pkg = ri.activityInfo.packageName;
+            if (pkg == null || pkg.equals(self) || pkgToLabel.containsKey(pkg)) continue;
+            CharSequence lbl = ri.loadLabel(pm);
+            pkgToLabel.put(pkg, lbl != null ? lbl.toString() : pkg);
+        }
+        java.util.List<java.util.Map.Entry<String,String>> entries = new java.util.ArrayList<>(pkgToLabel.entrySet());
+        entries.sort((a, b) -> a.getValue().compareToIgnoreCase(b.getValue()));
+        String[] labels = new String[entries.size()];
+        String[] pkgs   = new String[entries.size()];
+        for (int i = 0; i < entries.size(); i++) {
+            pkgs[i]   = entries.get(i).getKey();
+            labels[i] = entries.get(i).getValue() + "  —  " + pkgs[i];
+        }
+        final com.dashcast.devtools.layout.LayoutPreset.SlotDef finalSlot = slot;
+        new androidx.appcompat.app.AlertDialog.Builder(this)
+                .setTitle("Lancer dans [" + slot.label + "]")
+                .setItems(labels, (d, which) -> launchAppInSlot(pkgs[which], labels[which], finalSlot))
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    private void launchAppInSlot(String pkg, String appLabel, LayoutPreset.SlotDef slot) {
+        IBinder binder = sDaemonBinder;
+        if (binder == null) {
+            Toast.makeText(this, "Daemon non connecté", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        mExec.execute(() -> {
+            android.os.Parcel data = android.os.Parcel.obtain();
+            android.os.Parcel reply = android.os.Parcel.obtain();
+            try {
+                data.writeInterfaceToken(com.dashcast.devtools.common.MirrorDaemon.DESCRIPTOR);
+                data.writeString(pkg);
+                data.writeInt(slot.displayId);
+                data.writeInt(slot.w);
+                data.writeInt(slot.h);
+                binder.transact(com.dashcast.devtools.common.MirrorDaemon.TRANSACT_LAUNCH_AND_FORCE, data, reply, 0);
+                reply.readException();
+                String log = reply.readString();
+                runOnUiThread(() -> Toast.makeText(this,
+                        log.startsWith("OK") ? appLabel + " lancé dans [" + slot.label + "]"
+                                             : "Erreur: " + log,
+                        Toast.LENGTH_SHORT).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(this, "Erreur: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            } finally { data.recycle(); reply.recycle(); }
+        });
     }
 
     // ── Persistance ───────────────────────────────────────────────────────────
@@ -353,5 +412,6 @@ public class ClusterLayoutEditorActivity extends Activity {
     protected void onDestroy() {
         super.onDestroy();
         mExec.shutdown();
+        try { mExec.awaitTermination(500, java.util.concurrent.TimeUnit.MILLISECONDS); } catch (InterruptedException ignored) {}
     }
 }
