@@ -314,8 +314,17 @@ public class Dl3ProjectionActivity extends Activity {
         new AlertDialog.Builder(this)
                 .setTitle(R.string.diag_dl50_fission_pick_title)
                 .setItems(labels, (d, which) -> {
-                    if (which >= 0 && which < pkgs.length)
-                        resolveRectThenStart(pkgs[which], sorted.get(which).getValue());
+                    if (which >= 0 && which < pkgs.length) {
+                        String pkg2  = pkgs[which];
+                        String lbl2  = sorted.get(which).getValue();
+                        java.util.List<com.dashcast.devtools.layout.LayoutPreset.SlotDef> active =
+                                com.dashcast.devtools.layout.ClusterLayoutEditorActivity.sActiveSlots;
+                        if (active != null && !active.isEmpty()) {
+                            showLayoutZonePicker(pkg2, lbl2, active);
+                        } else {
+                            resolveRectThenStart(pkg2, lbl2);
+                        }
+                    }
                 })
                 .setNegativeButton(android.R.string.cancel, null)
                 .show();
@@ -327,6 +336,67 @@ public class Dl3ProjectionActivity extends Activity {
      * - App nav + pas de rect → affiche le picker de taille
      * - Autre app → utilise la zone libre disponible
      */
+
+    private void showLayoutZonePicker(String pkg, String appLabel,
+            java.util.List<com.dashcast.devtools.layout.LayoutPreset.SlotDef> slots) {
+        String[] names = new String[slots.size()];
+        for (int i = 0; i < slots.size(); i++) {
+            com.dashcast.devtools.layout.LayoutPreset.SlotDef s = slots.get(i);
+            names[i] = s.label
+                    + "  (" + s.w + "×" + s.h + ")"
+                    + (s.displayId >= 0 ? "  [VD:" + s.displayId + "]" : "  [non actif]");
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("Lancer " + appLabel + " dans…")
+                .setItems(names, (d, which) -> {
+                    com.dashcast.devtools.layout.LayoutPreset.SlotDef slot = slots.get(which);
+                    if (slot.displayId < 0) {
+                        Toast.makeText(this, "Zone non activée — activez le layout d'abord",
+                                Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    launchInLayoutSlot(pkg, appLabel, slot);
+                })
+                .setNeutralButton("Mode libre", (d, w) -> resolveRectThenStart(pkg, appLabel))
+                .setNegativeButton("Annuler", null)
+                .show();
+    }
+
+    private void launchInLayoutSlot(String pkg, String appLabel,
+            com.dashcast.devtools.layout.LayoutPreset.SlotDef slot) {
+        if (!mSurfaceReady) return;
+        setStatus("Lancement de " + appLabel + " dans [" + slot.label + "]...");
+        mExec.execute(() -> {
+            try {
+                // Assure que le daemon est connecté (binder partagé depuis l'éditeur)
+                if (mDaemonBinder == null) {
+                    mDaemonBinder = com.dashcast.devtools.layout.ClusterLayoutEditorActivity.sDaemonBinder;
+                }
+                if (mDaemonBinder == null) throw new RuntimeException("Daemon non connecté");
+
+                // LAUNCH_AND_FORCE directement dans le VD du slot (pas de ATTACH_SLOT)
+                Parcel lafData = Parcel.obtain(), lafReply = Parcel.obtain();
+                try {
+                    lafData.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
+                    lafData.writeString(pkg);
+                    lafData.writeInt(slot.displayId);
+                    lafData.writeInt(slot.w);
+                    lafData.writeInt(slot.h);
+                    mDaemonBinder.transact(MirrorDaemon.TRANSACT_LAUNCH_AND_FORCE, lafData, lafReply, 0);
+                    lafReply.readException();
+                    String log = lafReply.readString();
+                    AppLogger.d(TAG, "LAUNCH_AND_FORCE in layout slot: " + log);
+                    if (!log.startsWith("OK")) throw new RuntimeException(log);
+                } finally { lafData.recycle(); lafReply.recycle(); }
+
+                safeRun(() -> setStatus(appLabel + " → " + slot.label));
+            } catch (Exception e) {
+                AppLogger.e(TAG, "launchInLayoutSlot error", e);
+                safeRun(() -> setStatus("Erreur: " + e.getMessage()));
+            }
+        });
+    }
+
     private void resolveRectThenStart(String pkg, String label) {
         if (isNavApp(pkg)) {
             Rect saved = getSavedRect(pkg);

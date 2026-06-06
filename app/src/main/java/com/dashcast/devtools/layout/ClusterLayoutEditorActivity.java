@@ -35,8 +35,9 @@ public class ClusterLayoutEditorActivity extends Activity {
     private static final String PREFS_KEY  = "cluster_layouts_v1";
     private static final String ACTIVE_KEY = "active_layout_id";
 
-    // Clés pour passer le binder depuis Dl3ProjectionActivity
-    public static IBinder sDaemonBinder;
+    // Partagé avec Dl3ProjectionActivity pour le zone picker
+    public static IBinder                      sDaemonBinder;
+    public static List<LayoutPreset.SlotDef>   sActiveSlots;
 
     private ClusterCanvasView  mCanvas;
     private LinearLayout       mLlLayouts;
@@ -181,6 +182,7 @@ public class ClusterLayoutEditorActivity extends Activity {
                 data.writeInterfaceToken(MirrorDaemon.DESCRIPTOR);
                 data.writeInt(preset.slots.size());
                 for (LayoutPreset.SlotDef s : preset.slots) {
+                    data.writeString(s.label);
                     data.writeInt(s.x); data.writeInt(s.y);
                     data.writeInt(s.w); data.writeInt(s.h);
                 }
@@ -194,6 +196,7 @@ public class ClusterLayoutEditorActivity extends Activity {
                     if (displayId < 0) ok = false;
                 }
                 mActiveId = preset.id;
+                sActiveSlots = new ArrayList<>(preset.slots);
                 getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE).edit()
                         .putString(ACTIVE_KEY, mActiveId).apply();
 
@@ -215,9 +218,9 @@ public class ClusterLayoutEditorActivity extends Activity {
     private void deactivateLayout() {
         IBinder binder = sDaemonBinder;
         mActiveId = null;
+        sActiveSlots = null;
         getSharedPreferences(PREFS_KEY, Context.MODE_PRIVATE).edit()
                 .remove(ACTIVE_KEY).apply();
-        // Reset displayIds
         for (LayoutPreset p : mPresets) {
             for (LayoutPreset.SlotDef s : p.slots) s.displayId = -1;
         }

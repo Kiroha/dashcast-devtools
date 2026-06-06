@@ -1039,6 +1039,10 @@ public final class MirrorDaemon {
 
     /** Creates a TRUSTED VirtualDisplay for the given slot. */
     private static int createTrustedVdForSlot(SlotInfo slot, Surface surface) {
+        return createTrustedVdForSlot(slot, surface, "devtools_slot_" + slot.pkg);
+    }
+
+    private static int createTrustedVdForSlot(SlotInfo slot, Surface surface, String vdName) {
         try {
             DisplayManager dm = sContext.getSystemService(DisplayManager.class);
             VirtualDisplay vd = null;
@@ -1379,20 +1383,22 @@ public final class MirrorDaemon {
         reply.writeNoException();
         reply.writeInt(n);
         for (int i = 0; i < n; i++) {
+            String label = data.readString();
             int x = data.readInt(), y = data.readInt();
             int w = data.readInt(), h = data.readInt();
-            String pkg = "layout_" + i;
-            SlotInfo slot = new SlotInfo(pkg, x, y, w, h);
+            String safe = label.replaceAll("[^A-Za-z0-9_]", "_");
+            String key  = "layout_" + safe + "_" + i;
+            SlotInfo slot = new SlotInfo(key, x, y, w, h);
             Surface surface = tryAttachSlotOverlay(slot);
             if (surface == null) {
-                log("ACTIVATE_LAYOUT slot " + i + " overlay failed");
+                log("ACTIVATE_LAYOUT [" + label + "] overlay failed");
                 reply.writeInt(-1);
                 continue;
             }
-            int displayId = createTrustedVdForSlot(slot, surface);
+            int displayId = createTrustedVdForSlot(slot, surface, "devtools_layout_" + safe);
             if (displayId < 0) { slot.release(); reply.writeInt(-1); continue; }
-            sSlots.put(pkg, slot);
-            log("ACTIVATE_LAYOUT slot " + i + " → displayId=" + displayId);
+            sSlots.put(key, slot);
+            log("ACTIVATE_LAYOUT [" + label + "] → displayId=" + displayId);
             reply.writeInt(displayId);
         }
         return true;
