@@ -260,7 +260,7 @@ public class SnifferActivity extends Activity {
                     + " done";
 
                 String bgCmd =
-                    "echo > " + pf
+                    "true > " + pf
                     + " ; setsid sh -c 'trap \"\" HUP; exec logcat -v threadtime >> " + p + " 2>&1'"
                     + "   & echo $! >> " + pf
                     + " ; setsid sh -c '" + snapLoop + "'"
