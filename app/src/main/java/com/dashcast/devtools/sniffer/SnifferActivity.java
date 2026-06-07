@@ -168,8 +168,10 @@ public class SnifferActivity extends Activity {
         mSnifferFile = f;
         tvStatus.setText(getString(R.string.sniffer_checking));
         btnStart.setEnabled(false);
+        // Vérification par ps plutôt que par le sentinel : /data/local/tmp/ est nettoyé
+        // par un daemon BYD, le fichier sentinel disparaît même quand logcat tourne.
         AdbClient.executeShellWithResult(this,
-                "[ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ] && echo ACTIVE || echo STOPPED",
+                "ps -A 2>/dev/null | grep -q " + RE_SNIFFER_PREFIX + " && echo ACTIVE || echo STOPPED",
                 new AdbClient.Callback() {
             @Override public void onSuccess(String out) {
                 final boolean active = out.trim().equals("ACTIVE");
