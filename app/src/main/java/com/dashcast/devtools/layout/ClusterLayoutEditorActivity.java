@@ -149,7 +149,16 @@ public class ClusterLayoutEditorActivity extends Activity {
                     String name = et.getText().toString().trim();
                     if (name.isEmpty()) name = "Layout " + (mPresets.size() + 1);
                     mEditing.name = name;
-                    mPresets.add(mEditing);
+                    // Upsert : remplace si même ID, sinon ajoute
+                    boolean replaced = false;
+                    for (int i = 0; i < mPresets.size(); i++) {
+                        if (mPresets.get(i).id.equals(mEditing.id)) {
+                            mPresets.set(i, mEditing);
+                            replaced = true;
+                            break;
+                        }
+                    }
+                    if (!replaced) mPresets.add(mEditing);
                     savePresets();
                     // Prépare un nouveau layout vide pour l'édition
                     mEditing = new LayoutPreset("Nouveau layout");

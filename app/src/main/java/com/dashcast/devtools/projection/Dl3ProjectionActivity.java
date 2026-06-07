@@ -444,7 +444,26 @@ public class Dl3ProjectionActivity extends Activity {
         } else {
             Rect available = availableRect();
             if (available == null) {
-                Toast.makeText(this, "Plus d'espace disponible sur le cluster", Toast.LENGTH_SHORT).show();
+                // Plus de place : si un seul slot occupe tout, proposer de partager 50/50
+                if (mSlots.size() == 1) {
+                    SlotState existing = mSlots.values().iterator().next();
+                    new AlertDialog.Builder(this)
+                            .setTitle("Écran occupé")
+                            .setMessage("\"" + existing.label + "\" occupe tout l'écran. Partager en deux ?")
+                            .setPositiveButton("Partager 50/50", (d, w) -> {
+                                Rect eff = effectiveRect();
+                                int mid = eff.left + eff.width() / 2;
+                                Rect leftHalf  = new Rect(eff.left, eff.top, mid, eff.bottom);
+                                Rect rightHalf = new Rect(mid, eff.top, eff.right, eff.bottom);
+                                existing.rect = leftHalf;
+                                sendResizeSlot(existing.pkg, leftHalf);
+                                startSlot(pkg, label, rightHalf);
+                            })
+                            .setNegativeButton("Annuler", null)
+                            .show();
+                } else {
+                    Toast.makeText(this, "Plus d'espace disponible — fermez une app", Toast.LENGTH_SHORT).show();
+                }
                 return;
             }
             startSlot(pkg, label, available);
@@ -619,7 +638,7 @@ public class Dl3ProjectionActivity extends Activity {
 
         safeRun(() -> {
             updateSlotsStatus();
-            btnStart.setEnabled(mSurfaceReady && availableRect() != null);
+            btnStart.setEnabled(mSurfaceReady);
             btnStop.setEnabled(!mSlots.isEmpty());
         });
     }
