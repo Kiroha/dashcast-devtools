@@ -29,16 +29,18 @@ import java.util.Locale;
  * BYD_RE_Sniffer_*.txt file in this app's external files dir.
  *
  * <p>Background processes use {@code setsid} + {@code trap "" HUP} so they
- * survive Activity destruction (rotation, app paused, even Activity finished).
- * State is restored from SharedPreferences on each onCreate.
+ * survive Activity destruction. State is restored from SharedPreferences on
+ * each onCreate.
  *
- * <p>Lifted from DashCast's DiagActivity sniffer section.
+ * <p>PID file is stored in the app's own external files dir (not
+ * /data/local/tmp/ which is cleaned by a BYD daemon). Restore check uses
+ * {@code kill -0} on the stored PID — does not depend on cmdline patterns
+ * (which change after {@code exec logcat}).
  */
 public class SnifferActivity extends Activity {
 
     private static final String TAG = "Sniffer";
 
-    private static final String RE_SNIFFER_TAG    = ".re_sniffer_run";
     private static final String RE_SNIFFER_PIDS   = ".re_sniffer_pids";
     private static final String RE_SNIFFER_PREFIX = "BYD_RE_Sniffer_";
     private static final String PREF_SNIFFER      = "sniffer_prefs";
@@ -117,7 +119,6 @@ public class SnifferActivity extends Activity {
         if (active) startSizeRefresh(); else stopSizeRefresh();
     }
 
-    // Rafraîchit le status toutes les SIZE_REFRESH_MS avec la taille courante du fichier.
     private void startSizeRefresh() {
         stopSizeRefresh();
         mSizeRefreshRunnable = new Runnable() {
@@ -152,6 +153,11 @@ public class SnifferActivity extends Activity {
         return new File(dir, RE_SNIFFER_PREFIX + ts + ".txt");
     }
 
+    /** PID file in the app's own dir — survives BYD's /data/local/tmp cleanup. */
+    private String pidsPath(File snifferFile) {
+        return new File(snifferFile.getParentFile(), RE_SNIFFER_PIDS).getAbsolutePath();
+    }
+
     private void restoreSnifferState() {
         String saved = getSharedPreferences(PREF_SNIFFER, MODE_PRIVATE)
                 .getString(PREF_SNIFFER_PATH, null);
@@ -168,10 +174,15 @@ public class SnifferActivity extends Activity {
         mSnifferFile = f;
         tvStatus.setText(getString(R.string.sniffer_checking));
         btnStart.setEnabled(false);
-        // Vérification par ps plutôt que par le sentinel : /data/local/tmp/ est nettoyé
-        // par un daemon BYD, le fichier sentinel disparaît même quand logcat tourne.
+
+        // kill -0 sur le PID stocké dans le fichier pid : vérifie l'existence du
+        // processus directement, sans dépendre du cmdline (effacé après exec logcat)
+        // ni d'un fichier sentinel dans /data/local/tmp/ (nettoyé par daemon BYD).
+        final String pf = pidsPath(f);
         AdbClient.executeShellWithResult(this,
-                "ps -A 2>/dev/null | grep -q " + RE_SNIFFER_PREFIX + " && echo ACTIVE || echo STOPPED",
+                "[ -f " + pf + " ]"
+                + " && kill -0 $(head -1 " + pf + ") 2>/dev/null"
+                + " && echo ACTIVE || echo STOPPED",
                 new AdbClient.Callback() {
             @Override public void onSuccess(String out) {
                 final boolean active = out.trim().equals("ACTIVE");
@@ -188,8 +199,6 @@ public class SnifferActivity extends Activity {
                 });
             }
             @Override public void onError(String err) {
-                // ADB inaccessible : on ne sait pas si le sniffer tourne encore.
-                // On laisse Stop activé pour que l'utilisateur puisse forcer l'arrêt.
                 safeRunOnUi(() -> {
                     setUiActive(false, getString(R.string.sniffer_previous_no_adb_fmt,
                             f.getName(), (int) (f.length() / 1024)));
@@ -206,7 +215,8 @@ public class SnifferActivity extends Activity {
         getSharedPreferences(PREF_SNIFFER, MODE_PRIVATE).edit()
                 .putString(PREF_SNIFFER_PATH, mSnifferFile.getAbsolutePath()).apply();
         final String p  = mSnifferFile.getAbsolutePath();
-        final String pf = "/data/local/tmp/" + RE_SNIFFER_PIDS;
+        // PID file dans le même dossier que le log (pas /data/local/tmp/).
+        final String pf = pidsPath(mSnifferFile);
         AppLogger.i(TAG, "Starting → " + p);
 
         setUiActive(false, getString(R.string.sniffer_initializing));
@@ -214,13 +224,10 @@ public class SnifferActivity extends Activity {
         final String pSnap    = p.replace(".txt", "_snap.txt");
         final String pSnapTmp = pSnap + ".tmp";
 
-        // Kill + header dans une seule commande shell pour éviter la race condition :
-        // si kill et touch tournaient sur deux threads concurrents, rm -f pouvait
-        // supprimer le sentinel juste après que touch l'ait créé.
+        // Kill + header dans une seule commande pour éviter la race condition.
         String headerCmd =
-            buildKillCmd()
+            buildKillCmd(pf)
             + " ; logcat -c 2>/dev/null"
-            + " ; touch /data/local/tmp/" + RE_SNIFFER_TAG
             + " ; echo === BYD RE SNIFFER === > " + p
             + " ; date >> " + p
             + " ; getprop ro.product.model >> " + p
@@ -237,12 +244,11 @@ public class SnifferActivity extends Activity {
 
         AdbClient.executeShellWithResult(this, headerCmd, new AdbClient.Callback() {
             @Override public void onSuccess(String out) {
-                // Les double-quotes à l'intérieur d'un sh -c '...' sont littérales
-                // pour le shell externe. Le shell interne les évalue correctement.
-                // On évite ainsi le conflit de single-quotes avec printf '...'.
+                // Snap loop : tourne tant que le premier logcat (PID en tête du fichier
+                // pids) est vivant. kill -0 ne nécessite pas le cmdline du process.
                 String snapLoop =
                     "trap \"\" HUP;"
-                    + "while [ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ]; do sleep 60;"
+                    + "while kill -0 $(head -1 " + pf + ") 2>/dev/null; do sleep 60;"
                     + " printf \"=== SNAP %s ===\\n\" $(date +%H:%M:%S) > " + pSnapTmp + ";"
                     + " dumpsys display 2>/dev/null >> " + pSnapTmp + ";"
                     + " dumpsys SurfaceFlinger 2>/dev/null >> " + pSnapTmp + ";"
@@ -253,9 +259,6 @@ public class SnifferActivity extends Activity {
                     + " mv " + pSnapTmp + " " + pSnap + ";"
                     + " done";
 
-                // setsid crée une nouvelle session (immunité SIGHUP structurelle).
-                // trap "" HUP à l'intérieur du sh -c est hérité par exec : pas de
-                // dépendance à nohup qui n'est pas disponible sur tous les shells BYD.
                 String bgCmd =
                     "echo > " + pf
                     + " ; setsid sh -c 'trap \"\" HUP; exec logcat -v threadtime >> " + p + " 2>&1'"
@@ -274,10 +277,6 @@ public class SnifferActivity extends Activity {
                             getString(R.string.sniffer_toast_started_fmt, mSnifferFile.getName()),
                             Toast.LENGTH_LONG).show();
 
-                    // Vérification différée : si le fichier n'a pas grossi après BG_CHECK_MS,
-                    // bgCmd a probablement échoué silencieusement.
-                    // Stocké dans mBgCheckRunnable pour pouvoir l'annuler si Stop
-                    // est tapé avant l'expiration (évite un faux positif).
                     final File fileRef = mSnifferFile;
                     cancelBgCheck();
                     mBgCheckRunnable = () -> {
@@ -302,19 +301,18 @@ public class SnifferActivity extends Activity {
         });
     }
 
-    private String buildKillCmd() {
-        String pidFile = "/data/local/tmp/" + RE_SNIFFER_PIDS;
-        return "rm -f /data/local/tmp/" + RE_SNIFFER_TAG
-            + " ; if [ -f " + pidFile + " ]; then"
+    private String buildKillCmd(String pf) {
+        return "if [ -f " + pf + " ]; then"
             + "   while IFS= read -r pid; do"
-            + "     [ -n \"$pid\" ] && kill -9 \"$pid\" 2>/dev/null; done < " + pidFile + ";"
-            + "   rm -f " + pidFile + ";"
-            + " fi"
-            + " ; pkill -f " + RE_SNIFFER_PREFIX + " 2>/dev/null; true";
+            + "     [ -n \"$pid\" ] && kill -9 \"$pid\" 2>/dev/null;"
+            + "   done < " + pf + ";"
+            + "   rm -f " + pf + ";"
+            + " fi; true";
     }
 
     private void killSnifferProcesses() {
-        AdbClient.executeShell(this, buildKillCmd());
+        if (mSnifferFile == null) return;
+        AdbClient.executeShell(this, buildKillCmd(pidsPath(mSnifferFile)));
     }
 
     private void stopSniffer() {
