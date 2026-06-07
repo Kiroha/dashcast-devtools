@@ -28,9 +28,9 @@ import java.util.Locale;
  * SnifferActivity — continuous logcat + dumpsys snapshots into a single
  * BYD_RE_Sniffer_*.txt file in this app's external files dir.
  *
- * <p>Background processes use {@code nohup} + {@code setsid} so they survive
- * Activity destruction (rotation, app paused, even Activity finished). State
- * is restored from SharedPreferences on each onCreate.
+ * <p>Background processes use {@code setsid} + {@code trap "" HUP} so they
+ * survive Activity destruction (rotation, app paused, even Activity finished).
+ * State is restored from SharedPreferences on each onCreate.
  *
  * <p>Lifted from DashCast's DiagActivity sniffer section.
  */
@@ -239,7 +239,8 @@ public class SnifferActivity extends Activity {
                 // pour le shell externe. Le shell interne les évalue correctement.
                 // On évite ainsi le conflit de single-quotes avec printf '...'.
                 String snapLoop =
-                    "while [ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ]; do sleep 60;"
+                    "trap \"\" HUP;"
+                    + "while [ -f /data/local/tmp/" + RE_SNIFFER_TAG + " ]; do sleep 60;"
                     + " printf \"=== SNAP %s ===\\n\" $(date +%H:%M:%S) > " + pSnapTmp + ";"
                     + " dumpsys display 2>/dev/null >> " + pSnapTmp + ";"
                     + " dumpsys SurfaceFlinger 2>/dev/null >> " + pSnapTmp + ";"
@@ -250,15 +251,16 @@ public class SnifferActivity extends Activity {
                     + " mv " + pSnapTmp + " " + pSnap + ";"
                     + " done";
 
-                // nohup + setsid : double protection contre SIGHUP à la fermeture
-                // de la session ADB dadb. > /dev/null supprime le nohup.out.
+                // setsid crée une nouvelle session (immunité SIGHUP structurelle).
+                // trap "" HUP à l'intérieur du sh -c est hérité par exec : pas de
+                // dépendance à nohup qui n'est pas disponible sur tous les shells BYD.
                 String bgCmd =
                     "echo > " + pf
-                    + " ; nohup setsid sh -c 'exec logcat -v threadtime >> " + p + " 2>&1' > /dev/null"
+                    + " ; setsid sh -c 'trap \"\" HUP; exec logcat -v threadtime >> " + p + " 2>&1'"
                     + "   & echo $! >> " + pf
-                    + " ; nohup setsid sh -c '" + snapLoop + "' > /dev/null"
+                    + " ; setsid sh -c '" + snapLoop + "'"
                     + "   & echo $! >> " + pf
-                    + " ; nohup setsid sh -c 'exec logcat -b events -v time >> " + p + " 2>&1' > /dev/null"
+                    + " ; setsid sh -c 'trap \"\" HUP; exec logcat -b events -v time >> " + p + " 2>&1'"
                     + "   & echo $! >> " + pf;
 
                 final long sizeAfterHeader = mSnifferFile != null ? mSnifferFile.length() : 0;
