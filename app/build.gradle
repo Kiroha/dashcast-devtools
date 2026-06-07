@@ -18,8 +18,8 @@ android {
         applicationId "com.dashcast.devtools"
         minSdkVersion 28
         targetSdkVersion 29
-        versionCode 74
-        versionName "0.6.60-alpha"
+        versionCode 75
+        versionName "0.6.61-alpha"
     }
 
     buildTypes {

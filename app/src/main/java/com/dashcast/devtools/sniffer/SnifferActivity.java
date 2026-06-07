@@ -46,8 +46,9 @@ public class SnifferActivity extends Activity {
     private static final String PREF_SNIFFER      = "sniffer_prefs";
     private static final String PREF_SNIFFER_PATH = "re_sniffer_file_path";
 
-    private static final int SIZE_REFRESH_MS = 5_000;
-    private static final int BG_CHECK_MS     = 8_000;
+    private static final int SIZE_REFRESH_MS    = 5_000;
+    private static final int BG_CHECK_MS        = 8_000;
+    private static final int RESTORE_TIMEOUT_MS = 15_000;
 
     private TextView tvStatusPill;
     private TextView tvStatus;
@@ -60,9 +61,10 @@ public class SnifferActivity extends Activity {
     private volatile File    mSnifferFile;
     private volatile boolean mDestroyed;
 
-    private final Handler  mHandler            = new Handler(Looper.getMainLooper());
+    private final Handler  mHandler              = new Handler(Looper.getMainLooper());
     private       Runnable mSizeRefreshRunnable;
     private       Runnable mBgCheckRunnable;
+    private       Runnable mRestoreTimeoutRunnable;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -94,6 +96,7 @@ public class SnifferActivity extends Activity {
         mDestroyed = true;
         stopSizeRefresh();
         cancelBgCheck();
+        cancelRestoreTimeout();
         super.onDestroy();
     }
 
@@ -146,6 +149,13 @@ public class SnifferActivity extends Activity {
         }
     }
 
+    private void cancelRestoreTimeout() {
+        if (mRestoreTimeoutRunnable != null) {
+            mHandler.removeCallbacks(mRestoreTimeoutRunnable);
+            mRestoreTimeoutRunnable = null;
+        }
+    }
+
     private File buildSnifferFile() {
         String ts = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
         File dir = getExternalFilesDir(null);
@@ -175,6 +185,19 @@ public class SnifferActivity extends Activity {
         tvStatus.setText(getString(R.string.sniffer_checking));
         btnStart.setEnabled(false);
 
+        // Timeout : si ADB ne répond pas en 15s (pool EXEC saturé par des checks
+        // empilés), débloquer l'UI en mode "ADB inaccessible" plutôt que rester
+        // bloqué sur "Vérification" indéfiniment.
+        cancelRestoreTimeout();
+        mRestoreTimeoutRunnable = () -> {
+            mRestoreTimeoutRunnable = null;
+            if (mDestroyed) return;
+            setUiActive(false, getString(R.string.sniffer_previous_no_adb_fmt,
+                    f.getName(), (int) (f.length() / 1024)));
+            btnStop.setEnabled(true);
+        };
+        mHandler.postDelayed(mRestoreTimeoutRunnable, RESTORE_TIMEOUT_MS);
+
         // kill -0 sur le PID stocké dans le fichier pid : vérifie l'existence du
         // processus directement, sans dépendre du cmdline (effacé après exec logcat)
         // ni d'un fichier sentinel dans /data/local/tmp/ (nettoyé par daemon BYD).
@@ -187,6 +210,7 @@ public class SnifferActivity extends Activity {
             @Override public void onSuccess(String out) {
                 final boolean active = out.trim().equals("ACTIVE");
                 safeRunOnUi(() -> {
+                    cancelRestoreTimeout();
                     if (active) {
                         setUiActive(true, getString(R.string.sniffer_active_detail_fmt,
                                 f.getName(), (int) (f.length() / 1024)));
@@ -200,6 +224,7 @@ public class SnifferActivity extends Activity {
             }
             @Override public void onError(String err) {
                 safeRunOnUi(() -> {
+                    cancelRestoreTimeout();
                     setUiActive(false, getString(R.string.sniffer_previous_no_adb_fmt,
                             f.getName(), (int) (f.length() / 1024)));
                     btnStop.setEnabled(true);
@@ -225,6 +250,9 @@ public class SnifferActivity extends Activity {
         final String pSnapTmp = pSnap + ".tmp";
 
         // Kill + header dans une seule commande pour éviter la race condition.
+        // Le snapshot initial est retiré du chemin critique : les dumpsys prenaient
+        // 5-6s et bloquaient l'UI sur "Initialisation". Le snap loop fait le premier
+        // snapshot au bout de 60s, ou l'utilisateur peut en déclencher un manuellement.
         String headerCmd =
             buildKillCmd(pf)
             + " ; logcat -c 2>/dev/null"
@@ -232,15 +260,7 @@ public class SnifferActivity extends Activity {
             + " ; date >> " + p
             + " ; getprop ro.product.model >> " + p
             + " ; getprop ro.build.fingerprint >> " + p
-            + " ; echo === LIVE CAPTURE START === >> " + p
-            + " ; printf '=== SNAP INITIAL %s ===\\n' $(date +%H:%M:%S) > " + pSnapTmp
-            + " ; dumpsys display 2>/dev/null >> " + pSnapTmp
-            + " ; dumpsys SurfaceFlinger 2>/dev/null >> " + pSnapTmp
-            + " ; dumpsys window 2>/dev/null >> " + pSnapTmp
-            + " ; dumpsys activity 2>/dev/null >> " + pSnapTmp
-            + " ; dumpsys meminfo 2>/dev/null >> " + pSnapTmp
-            + " ; ps -A 2>/dev/null >> " + pSnapTmp
-            + " ; mv " + pSnapTmp + " " + pSnap;
+            + " ; echo === LIVE CAPTURE START === >> " + p;
 
         AdbClient.executeShellWithResult(this, headerCmd, new AdbClient.Callback() {
             @Override public void onSuccess(String out) {
